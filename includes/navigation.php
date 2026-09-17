@@ -62,6 +62,9 @@ function nav_items(): array
             'children' => [
                 ['label' => 'Products', 'icon' => 'box',     'href' => 'modules/inventory/view_products.php'],
                 ['label' => 'Add Product', 'icon' => 'plus',  'href' => 'modules/inventory/view_products.php?new=1'],
+                //  Where expiry actually gets dealt with. The batch
+                //  warnings the bell raises have always linked here.
+                ['label' => 'Batches & Expiry', 'icon' => 'clock', 'href' => 'modules/inventory/batches.php'],
                 ['label' => 'Stock Take', 'icon' => 'clipboard',   'href' => 'modules/inventory/stock_take.php',
                  'roles' => [ROLE_ADMIN, ROLE_MANAGER]],
                 ['label' => 'Categories', 'icon' => 'layers',   'href' => 'modules/inventory/view_categories.php'],
