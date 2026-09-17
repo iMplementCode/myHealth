@@ -65,6 +65,7 @@ if (is_post()) {
         'method'           => (string) ($_POST['method'] ?? ''),
         'cash_account_id'  => (int) ($_POST['cash_account_id'] ?? 0),
         'customer_id'      => (int) ($_POST['customer_id'] ?? 0),
+        'patient_id'       => (int) ($_POST['patient_id'] ?? 0),
         'prescriber'       => (string) ($_POST['prescriber'] ?? ''),
         'prescription_ref' => (string) ($_POST['prescription_ref'] ?? ''),
     ]);
@@ -131,6 +132,18 @@ require __DIR__ . '/../../includes/header.php';
 
         <form id="sale" method="POST" autocomplete="off">
             <?= csrf_field() ?>
+
+            <div class="u-pad" style="padding-bottom:0;">
+                <div class="form-group">
+                    <label class="form-label" for="patient">Patient <span class="opt">(optional)</span></label>
+                    <input type="search" id="patient" class="form-control" autocomplete="off"
+                           placeholder="Name, number or phone&hellip;">
+                    <input type="hidden" name="patient_id" id="patient_id" value="">
+                    <span class="hint">Leave empty for somebody buying off the shelf.</span>
+                    <div id="patient-hits" class="counter-results"></div>
+                    <div id="patient-chosen" hidden></div>
+                </div>
+            </div>
 
             <div class="table-wrap">
                 <table class="data-table" id="basket">
@@ -429,6 +442,91 @@ require __DIR__ . '/../../includes/header.php';
         }, 180);
     });
 
+    /* ── Who it is for ──────────────────────────────────────
+       Optional, and the reason it is here at all is the allergy
+       line: the person dispensing has to see it before they hand
+       anything over. Nothing is matched automatically — see
+       includes/patients.php. */
+    var patientBox    = document.getElementById('patient');
+    var patientHits   = document.getElementById('patient-hits');
+    var patientId     = document.getElementById('patient_id');
+    var patientChosen = document.getElementById('patient-chosen');
+
+    function clearPatient() {
+        patientId.value = '';
+        patientChosen.hidden = true;
+        patientChosen.innerHTML = '';
+        patientBox.hidden = false;
+    }
+
+    function choosePatient(p) {
+        patientId.value = p.id;
+        patientHits.innerHTML = '';
+        patientBox.value = '';
+        patientBox.hidden = true;
+        patientChosen.hidden = false;
+        patientChosen.innerHTML = '';
+
+        var line = document.createElement('div');
+        line.className = 'alert alert--info';
+        line.setAttribute('role', 'status');
+        var who = document.createElement('span');
+        who.textContent = p.name + ' · ' + p.number + (p.age ? ' · ' + p.age : '');
+        line.appendChild(who);
+        var drop = document.createElement('button');
+        drop.type = 'button';
+        drop.className = 'btn btn-ghost btn-sm';
+        drop.textContent = 'Change';
+        drop.addEventListener('click', clearPatient);
+        line.appendChild(drop);
+        patientChosen.appendChild(line);
+
+        if (p.allergies) {
+            var warn = document.createElement('div');
+            warn.className = 'alert alert--error';
+            warn.setAttribute('role', 'alert');
+            var t = document.createElement('span');
+            t.textContent = 'Allergies: ' + p.allergies;
+            warn.appendChild(t);
+            patientChosen.appendChild(warn);
+        }
+    }
+
+    var ptimer = null;
+    patientBox.addEventListener('input', function () {
+        clearTimeout(ptimer);
+        var term = patientBox.value.trim();
+        if (term.length < 2) { patientHits.innerHTML = ''; return; }
+        ptimer = setTimeout(function () {
+            fetch('<?= e(url('patients/index.php')) ?>?find=' + encodeURIComponent(term),
+                  { headers: { 'Accept': 'application/json' } })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                patientHits.innerHTML = '';
+                (data.results || []).forEach(function (p) {
+                    var b = document.createElement('button');
+                    b.type = 'button';
+                    b.className = 'counter-hit';
+                    var n = document.createElement('span');
+                    n.className = 'counter-hit-name';
+                    n.textContent = p.name;
+                    b.appendChild(n);
+                    var sub = document.createElement('span');
+                    sub.className = 'counter-hit-sub';
+                    var bits = [p.number];
+                    if (p.age)   { bits.push(p.age); }
+                    if (p.phone) { bits.push(p.phone); }
+                    if (p.allergies) { bits.push('allergies recorded'); }
+                    sub.textContent = bits.join(' · ');
+                    b.appendChild(sub);
+                    b.addEventListener('click', function () { choosePatient(p); });
+                    patientHits.appendChild(b);
+                });
+            })
+            .catch(function () { /* the sale does not depend on this */ });
+        }, 180);
+    });
+
     form.addEventListener('submit', function (e) {
         e.preventDefault();
         button.disabled = true;
@@ -444,6 +542,7 @@ require __DIR__ . '/../../includes/header.php';
                 }
                 alertBox('success', data.message + ' ' + (data.number || ''));
                 basket = [];
+                clearPatient();
                 render();
                 if (data.receipt) { window.open(data.receipt, '_blank', 'noopener'); }
             })

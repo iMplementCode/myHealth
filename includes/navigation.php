@@ -42,6 +42,11 @@ function nav_items(): array
             'href'  => 'counter/index.php',
         ],
         [
+            'label' => 'Patients',
+            'icon'  => 'users',
+            'href'  => 'patients/index.php',
+        ],
+        [
             'label' => 'Notifications',
             'icon'  => 'bell',
             'href'  => 'notifications/index.php',

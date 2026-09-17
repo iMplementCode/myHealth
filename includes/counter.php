@@ -40,6 +40,7 @@ require_once __DIR__ . '/pharmacy.php';
 //  next_document_number() lives here, and a sale cannot be
 //  written without one.
 require_once __DIR__ . '/documents.php';
+require_once __DIR__ . '/patients.php';
 
 /** How the counter takes money. Keys must satisfy the CHECK on invoice_payments.method. */
 const COUNTER_METHODS = [
@@ -225,6 +226,14 @@ function counter_complete(array $lines, array $sale): array
         $wants[$pid] = $qty;
     }
 
+    /*  Checked before the sale rather than trusted: a posted id
+     *  that is not a patient must not become a dangling reference
+     *  on a clinical record. */
+    $patientId = (int) ($sale['patient_id'] ?? 0) ?: null;
+    if ($patientId !== null && !patient_get($patientId)) {
+        return $fail('That patient record could not be found.');
+    }
+
     $prescriber = trim((string) ($sale['prescriber'] ?? ''));
     $rxRef      = trim((string) ($sale['prescription_ref'] ?? ''));
     if ($needRx && $prescriber === '') {
@@ -252,15 +261,22 @@ function counter_complete(array $lines, array $sale): array
         }
 
         $number = next_document_number('invoices', 'invoice_number', 'INV');
+        /*  The patient is optional and stays optional. Somebody
+         *  buying plasters is not an encounter, and making them
+         *  one to satisfy a column would fill the register with
+         *  people who were never treated. */
+        $patientCol = column_exists('invoices', 'patient_id') ? ', patient_id' : '';
+        $patientVal = $patientCol !== '' ? ', :patient' : '';
+
         $stmt = $pdo->prepare(
             "INSERT INTO invoices
                 (invoice_number, customer_id, issued_by, issue_date, due_date,
                  subtotal, discount_amount, tax_amount, tax_rate, total_amount,
-                 status, prescriber, prescription_ref)
+                 status, prescriber, prescription_ref$patientCol)
              VALUES
                 (:num, :cust, :user, CURRENT_DATE, CURRENT_DATE,
                  :sub, 0, 0, 0, :total,
-                 'paid', :presc, :ref)
+                 'paid', :presc, :ref$patientVal)
              RETURNING invoice_id"
         );
         $stmt->execute([
@@ -271,7 +287,7 @@ function counter_complete(array $lines, array $sale): array
             ':total' => $subtotal,
             ':presc' => $prescriber !== '' ? $prescriber : null,
             ':ref'   => $rxRef !== '' ? $rxRef : null,
-        ]);
+        ] + ($patientCol !== '' ? [':patient' => $patientId] : []));
         $invoiceId = (int) $stmt->fetchColumn();
 
         // ── Stock, out of named batches, oldest expiry first ──
