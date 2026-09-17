@@ -87,7 +87,13 @@ $tills = db_all(
 );
 $walkIn = counter_walk_in_customer();
 
-$pageTitle = 'Counter';
+$pageTitle    = 'Counter';
+/*  forms.css styles every control on this page — .form-control,
+    .form-label, .hint, .form-grid-2 — and finance.css carries the
+    .u-pad the panels use. Without them the browser's own widgets
+    show through, which is what this screen shipped doing.        */
+$pageStyles   = ['forms.css', 'finance.css'];
+$breadcrumbs  = [['label' => 'Counter']];
 require __DIR__ . '/../../includes/header.php';
 ?>
 
@@ -146,7 +152,7 @@ require __DIR__ . '/../../includes/header.php';
             </div>
 
             <div class="table-wrap">
-                <table class="data-table" id="basket">
+                <table class="data-table counter-basket" id="basket">
                     <thead>
                         <tr>
                             <th>Medicine</th>
@@ -219,7 +225,7 @@ require __DIR__ . '/../../includes/header.php';
     </div>
 </div>
 
-<script>
+<script nonce="<?= csp_nonce() ?>">
 (function () {
     'use strict';
 
@@ -303,8 +309,7 @@ require __DIR__ . '/../../includes/header.php';
             qtd.className = 'ta-right';
             var q = document.createElement('input');
             q.type = 'number'; q.min = '0.001'; q.step = 'any';
-            q.className = 'form-control'; q.style.maxWidth = '90px';
-            q.style.display = 'inline-block'; q.style.textAlign = 'right';
+            q.className = 'form-control counter-num counter-qty';
             q.value = item.qty;
             q.setAttribute('aria-label', 'Quantity of ' + item.label);
             q.addEventListener('input', function () {
@@ -318,8 +323,7 @@ require __DIR__ . '/../../includes/header.php';
             ptd.className = 'ta-right';
             var p = document.createElement('input');
             p.type = 'number'; p.min = '0'; p.step = '0.01';
-            p.className = 'form-control'; p.style.maxWidth = '110px';
-            p.style.display = 'inline-block'; p.style.textAlign = 'right';
+            p.className = 'form-control counter-num counter-price';
             p.value = Number(item.price).toFixed(2);
             p.setAttribute('aria-label', 'Unit price of ' + item.label);
             p.addEventListener('input', function () {
@@ -338,8 +342,15 @@ require __DIR__ . '/../../includes/header.php';
             xtd.className = 'ta-right';
             var x = document.createElement('button');
             x.type = 'button';
-            x.className = 'btn btn-ghost btn-sm';
-            x.textContent = 'Remove';
+            /*  An icon, not the word: "Remove" spelled out cost about
+                sixty pixels per row, which was enough to push this
+                column past the edge of the panel and leave the
+                button reachable only by scrolling sideways. The
+                label stays for a screen reader. */
+            x.className = 'btn btn-ghost btn-sm counter-remove';
+            x.textContent = '\u00d7';
+            x.title = 'Remove';
+            x.setAttribute('aria-label', 'Remove ' + item.label + ' from this sale');
             x.addEventListener('click', function () {
                 basket.splice(i, 1);
                 render();

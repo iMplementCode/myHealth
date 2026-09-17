@@ -1681,6 +1681,68 @@ html[data-theme="light"] .margin-figure.is-loss { color: #b91c1c; }
 .counter-hit-name { font-weight: 600; font-size: 15px; }
 .counter-hit-sub  { font-size: 13px; color: var(--ink-dim); }
 
+/*  The quantity and price cells on a basket line.
+ *
+ *  These were inline styles capped at 90px and 110px, which was
+ *  not enough once forms.css put 13px of padding on each side and
+ *  the browser put its spinner arrows on the right: a price of
+ *  180.00 rendered as "18(". A pharmacist who cannot read the
+ *  price they are charging is the whole problem with this screen.
+ *
+ *  The spinners go because nobody at a counter clicks a 9px arrow
+ *  twelve times to reach a quantity of twelve — they type it, and
+ *  the arrows were spending the width that the number needed. */
+/*  input.counter-num, not .counter-num: forms.css loads after this
+ *  file and its bare .form-control would otherwise win on source
+ *  order and put the 13px padding back.
+ *
+ *  min-width is the part that does the work. The basket table is
+ *  auto-layout, so the medicine name takes what it likes and the
+ *  number columns are left with whatever remains — which measured
+ *  48px, less than the padding needed. A min-width makes the
+ *  column open up to fit the number instead of the other way
+ *  round. */
+input.counter-num {
+    width: 100%;
+    text-align: right;
+    padding: 8px 10px;
+    appearance: textfield;
+    -moz-appearance: textfield;
+}
+input.counter-num::-webkit-outer-spin-button,
+input.counter-num::-webkit-inner-spin-button {
+    appearance: none;
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+/*  Sized for the widest thing each really holds: a three-digit
+ *  quantity, and a price in the thousands with two decimals. */
+.counter-qty   { min-width: 74px;  max-width: 96px; }
+.counter-price { min-width: 100px; max-width: 128px; }
+
+/*  The × that takes a line back off the sale. Square, so the row
+ *  height sets the target rather than the glyph, which is small. */
+.counter-remove {
+    font-size: 18px;
+    line-height: 1;
+    padding: 6px 11px;
+}
+
+/*  Five columns inside a panel that is only part of the screen.
+ *  The app-wide 16px of cell padding spends 160px of that width on
+ *  whitespace, which was enough to push the remove column out past
+ *  the edge and leave it reachable only by scrolling sideways. */
+/*  Qualified with .data-table and the row group because the rule
+ *  it has to beat is `.data-table tbody td`, which outranks a bare
+ *  `.counter-basket td` however far down the file it sits. */
+.data-table.counter-basket thead th,
+.data-table.counter-basket tbody td,
+.data-table.counter-basket tfoot th {
+    padding-left: 10px;
+    padding-right: 10px;
+}
+
 @media (max-width: 900px) {
     .counter-grid { grid-template-columns: 1fr; }
 }

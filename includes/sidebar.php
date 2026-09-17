@@ -25,7 +25,16 @@ if (!defined('BASE_PATH')) {
     <div class="sidebar-brand">
         <a href="<?= e(url('dashboard/index.php')) ?>" class="brand-link">
             <span class="brand-mark">mH</span>
-            <span class="brand-text">iMplement<span class="brand-accent">ERP</span></span>
+            <?php /*  APP_NAME rather than a second copy of the product's
+                      name. The mark beside it had already been changed to
+                      "mH" and this had not, so a pharmacy called myHealth
+                      introduced itself as iMplementERP on every page it
+                      served. Split on the first capital so the accent
+                      still lands the way it was drawn: my|Health.      */
+                  $brandParts = preg_match('/^(.+?)([A-Z].*)$/', APP_NAME, $m)
+                      ? [$m[1], $m[2]]
+                      : [APP_NAME, '']; ?>
+            <span class="brand-text"><?= e($brandParts[0]) ?><span class="brand-accent"><?= e($brandParts[1]) ?></span></span>
         </a>
     </div>
 
