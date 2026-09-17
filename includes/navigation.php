@@ -123,6 +123,10 @@ function nav_items(): array
                 ['label' => 'Stock and Reorder', 'icon' => 'box', 'href' => 'reports/stock.php'],
                 ['label' => 'Stock Value', 'icon' => 'wallet',      'href' => 'reports/stock_value.php'],
                 ['label' => 'VAT Summary', 'icon' => 'percent',       'href' => 'reports/vat.php'],
+                //  The register an inspector asks for. Manager-only,
+                //  like the page itself: it names patients.
+                ['label' => 'Controlled Drugs', 'icon' => 'shield', 'href' => 'reports/controlled_register.php',
+                 'roles' => [ROLE_ADMIN, ROLE_MANAGER]],
             ],
         ],
         [

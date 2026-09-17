@@ -31,6 +31,13 @@ $payTotals = report_ageing_totals($pay);
 $stock     = report_stock('all');
 $lowCount  = count(array_filter($stock, fn($r) => $r['stock_state'] !== 'ok'));
 $stockCost = array_sum(array_map(fn($r) => (float) $r['value_at_cost'], $stock));
+//  How many drugs need a register at all. Zero is a legitimate
+//  answer for a shop that holds none, and the card says so
+//  rather than hiding.
+$controlledCount = (int) db_value(
+    "SELECT COUNT(*) FROM products
+      WHERE controlled_schedule IS NOT NULL AND controlled_schedule <> ''"
+);
 // Saleable only: the valuation answers "what would this fetch",
 // which a product with no selling price cannot be part of.
 // Held-only, so the card equals what the report shows on landing.
@@ -92,6 +99,14 @@ $REPORTS = [
         'blurb' => 'One supplier\'s account movement by movement — goods in, goods back, money paid. What to reconcile theirs against.',
         'stat'  => num($paySuppliers),
         'label' => 'supplier' . ($paySuppliers === 1 ? '' : 's') . ' with a balance',
+        'tone'  => '',
+    ],
+    [
+        'title' => 'Controlled Drugs Register',
+        'href'  => 'reports/controlled_register.php',
+        'blurb' => 'Every narcotic and psychotropic received and issued, in date order with a running balance. What an inspector asks to see.',
+        'stat'  => num($controlledCount),
+        'label' => 'controlled drug' . ($controlledCount === 1 ? '' : 's') . ' on the catalogue',
         'tone'  => '',
     ],
     [
