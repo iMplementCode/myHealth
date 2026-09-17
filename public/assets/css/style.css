@@ -1628,3 +1628,59 @@ html[data-theme="light"] .margin-figure.is-loss { color: #b91c1c; }
     .picker-option:last-child { border-bottom: none; }
     .picker-option.is-chosen { background: var(--primary); color: #04222c; font-weight: 600; }
 }
+
+/* ── The counter ─────────────────────────────────────────────
+   Two columns on a desk, stacked on a phone. The search results
+   are buttons rather than a list, because at a counter the whole
+   row is the target and hunting for a link inside it costs time
+   the queue is paying for. */
+.counter-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+    gap: 18px;
+    align-items: start;
+}
+
+.counter-results {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 10px;
+    max-height: 420px;
+    overflow-y: auto;
+}
+
+.counter-hit {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    width: 100%;
+    text-align: left;
+    padding: 11px 13px;
+    /* A counter is used standing up, often in a hurry. 52px is the
+       smallest target that does not get mis-tapped. */
+    min-height: 52px;
+    border: 1px solid var(--border-lt);
+    border-radius: var(--radius);
+    background: var(--panel);
+    color: var(--ink);
+    font-family: inherit;
+    cursor: pointer;
+}
+
+.counter-hit:hover:not(:disabled),
+.counter-hit:focus-visible { border-color: var(--primary); }
+
+.counter-hit:disabled {
+    /* Out of stock. Still shown — "we do not have it" is an answer,
+       and hiding the row looks like the drug does not exist. */
+    opacity: .55;
+    cursor: not-allowed;
+}
+
+.counter-hit-name { font-weight: 600; font-size: 15px; }
+.counter-hit-sub  { font-size: 13px; color: var(--ink-dim); }
+
+@media (max-width: 900px) {
+    .counter-grid { grid-template-columns: 1fr; }
+}

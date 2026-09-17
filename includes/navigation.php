@@ -34,6 +34,13 @@ function nav_items(): array
             'icon'  => 'grid',
             'href'  => 'dashboard/index.php',
         ],
+        //  Second, and never buried in a submenu. It is the screen
+        //  this shop opens in the morning and closes at night.
+        [
+            'label' => 'Counter',
+            'icon'  => 'cart',
+            'href'  => 'counter/index.php',
+        ],
         [
             'label' => 'Notifications',
             'icon'  => 'bell',
