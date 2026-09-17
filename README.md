@@ -94,6 +94,7 @@ change reaches every site without anybody logging in to a server.
 
 | | |
 |---|---|
+| `docs/PHARMACY.md` | the drugs, the batches, the counter — and what is **not** built |
 | `docs/ARCHITECTURE.md` | how a request is served |
 | `docs/DATABASE.md` | the tables, and why they are shaped that way |
 | `docs/SECURITY.md` | every control, and the passes that tried to break them |
