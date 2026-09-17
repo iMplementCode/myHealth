@@ -19,6 +19,7 @@ require_once __DIR__ . '/../../../includes/export.php';
 require_once __DIR__ . '/../../../includes/icons.php';
 require_once __DIR__ . '/../../../includes/uploads.php';
 require_once __DIR__ . '/../../../includes/documents.php';
+require_once __DIR__ . '/../../../includes/pharmacy.php';
 
 /* ── AJAX: suggest a SKU for the product form ─────────────── */
 if (is_post() && ($_POST['_action'] ?? '') === 'suggest_sku') {
@@ -118,7 +119,19 @@ if (is_post() && in_array($_POST['_action'] ?? '', ['create', 'update'], true)) 
     $typeValue  = $hasTypes ? ':ptype,'       : '';
     $typeSet    = $hasTypes ? 'product_type = :ptype,' : '';
 
+    /*  Validated against the lists in includes/pharmacy.php, which
+     *  are the same lists the selects were built from. Anything
+     *  else becomes NULL rather than reaching the CHECK constraint
+     *  — the constraint is the backstop, not the error message. */
     $fields = [
+        ':generic'  => input($_POST, 'generic_name') ?: null,
+        ':strength' => input($_POST, 'strength') ?: null,
+        ':form'     => pharmacy_valid(DOSAGE_FORMS, $_POST['dosage_form'] ?? ''),
+        ':route'    => pharmacy_valid(ADMIN_ROUTES, $_POST['route'] ?? ''),
+        ':storage'  => pharmacy_valid(STORAGE_CONDITIONS, $_POST['storage'] ?? ''),
+        ':sched'    => pharmacy_valid(CONTROLLED_SCHEDULES, $_POST['controlled_schedule'] ?? ''),
+        ':ppb'      => input($_POST, 'ppb_registration_no') ?: null,
+        ':rx'       => isset($_POST['requires_rx']) ? 't' : 'f',
         ':name' => $name,
         ':sku' => $sku,
         ':barcode' => input($_POST, 'barcode') !== '' ? input($_POST, 'barcode') : null,
@@ -147,12 +160,16 @@ if (is_post() && in_array($_POST['_action'] ?? '', ['create', 'update'], true)) 
                 "INSERT INTO products
                     (name, sku, barcode, cost_price, selling_price, discount_price,
                      stock_quantity, low_quantity_threshold, $typeColumn is_active, brand_id,
+                     generic_name, strength, dosage_form, route, storage,
+                     controlled_schedule, ppb_registration_no, requires_rx,
                      category_id, supplier_id, uom_id, description,
                      short_description, is_published, is_featured, weight_kg,
                      meta_title, meta_description, published_at, created_by)
                  VALUES
                     (:name, :sku, :barcode, :cost, :sell, :disc,
                      :qty, :low, $typeValue :active, :brand,
+                     :generic, :strength, :form, :route, :storage,
+                     :sched, :ppb, :rx,
                      :category, :supplier, :uom, :desc_long,
                      :short, :published, :featured, :weight,
                      :mtitle, :mdesc,
@@ -169,6 +186,9 @@ if (is_post() && in_array($_POST['_action'] ?? '', ['create', 'update'], true)) 
                  cost_price = :cost, selling_price = :sell, discount_price = :disc,
                  stock_quantity = :qty, low_quantity_threshold = :low,
                  $typeSet is_active = :active, brand_id = :brand, short_description = :short,
+                 generic_name = :generic, strength = :strength, dosage_form = :form,
+                 route = :route, storage = :storage, controlled_schedule = :sched,
+                 ppb_registration_no = :ppb, requires_rx = :rx,
                  category_id = :category, supplier_id = :supplier, uom_id = :uom,
                  description = :desc_long,
                  is_published = :published, is_featured = :featured,
@@ -480,6 +500,14 @@ $baseQuery = array_filter([
                         'weight_kg'              => $p['weight_kg'] ?? '',
                         'meta_title'             => $p['meta_title'] ?? '',
                         'meta_description'       => $p['meta_description'] ?? '',
+                        'generic_name'           => $p['generic_name'] ?? '',
+                        'strength'               => $p['strength'] ?? '',
+                        'dosage_form'            => $p['dosage_form'] ?? '',
+                        'route'                  => $p['route'] ?? '',
+                        'storage'                => $p['storage'] ?? '',
+                        'controlled_schedule'    => $p['controlled_schedule'] ?? '',
+                        'ppb_registration_no'    => $p['ppb_registration_no'] ?? '',
+                        'requires_rx'            => $p['requires_rx'] ?? false,
                         'specifications'         => implode("\n", $specsByProduct[$p['product_id']] ?? []),
                     ], JSON_HEX_APOS | JSON_HEX_QUOT);
                 ?>
@@ -616,6 +644,87 @@ $baseQuery = array_filter([
         <div class="form-group">
             <label class="form-label"><span data-name-label>Product</span> name <span class="req">*</span></label>
             <input type="text" name="name" class="form-control" required maxlength="255">
+        </div>
+
+        <?php /*  The identity of a medicine, kept next to the name
+                  because that is what it is. A shelf holds "Amoxil
+                  250" and "Amoxil 500" as two different things, and
+                  a row that records only "Amoxil" cannot tell them
+                  apart when somebody is counting stock. */ ?>
+        <div class="form-grid-3" data-goods-only>
+            <div class="form-group">
+                <label class="form-label">Generic name</label>
+                <input type="text" name="generic_name" class="form-control" maxlength="160"
+                       placeholder="Paracetamol">
+                <span class="form-hint">What it actually is. Somebody asking for Panadol
+                    and somebody asking for Hedex want the same thing.</span>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Strength</label>
+                <input type="text" name="strength" class="form-control" maxlength="60"
+                       placeholder="500 mg">
+                <span class="form-hint">As it is written on the pack &mdash; 500 mg,
+                    5 mg/ml, 500 mg/125 mg.</span>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Form</label>
+                <select name="dosage_form" class="form-control">
+                    <option value="">&mdash; Not said &mdash;</option>
+                    <?php foreach (DOSAGE_FORMS as $k => $label): ?>
+                        <option value="<?= e($k) ?>"><?= e($label) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+        </div>
+
+        <div class="form-grid-3" data-goods-only>
+            <div class="form-group">
+                <label class="form-label">Route</label>
+                <select name="route" class="form-control">
+                    <option value="">&mdash; Not said &mdash;</option>
+                    <?php foreach (ADMIN_ROUTES as $k => $label): ?>
+                        <option value="<?= e($k) ?>"><?= e($label) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Storage</label>
+                <select name="storage" class="form-control">
+                    <option value="">&mdash; Not said &mdash;</option>
+                    <?php foreach (STORAGE_CONDITIONS as $k => $label): ?>
+                        <option value="<?= e($k) ?>"><?= e($label) ?></option>
+                    <?php endforeach; ?>
+                </select>
+                <span class="form-hint">Cold-chain stock that spent a night out of the
+                    fridge is waste, and nobody can tell by looking.</span>
+            </div>
+            <div class="form-group">
+                <label class="form-label">PPB registration no.</label>
+                <input type="text" name="ppb_registration_no" class="form-control" maxlength="40">
+                <span class="form-hint">What an inspector asks for.</span>
+            </div>
+        </div>
+
+        <div class="form-grid-2" data-goods-only>
+            <div class="form-group">
+                <label class="checkbox">
+                    <input type="checkbox" name="requires_rx">
+                    <span>Prescription only</span>
+                </label>
+                <span class="form-hint">The counter will not sell this without a
+                    prescription on the sale.</span>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Controlled class</label>
+                <select name="controlled_schedule" class="form-control">
+                    <option value="">&mdash; Not controlled &mdash;</option>
+                    <?php foreach (CONTROLLED_SCHEDULES as $k => $label): ?>
+                        <option value="<?= e($k) ?>"><?= e($label) ?></option>
+                    <?php endforeach; ?>
+                </select>
+                <span class="form-hint">Narcotics and psychotropics go in the controlled
+                    register, which is a legal obligation rather than a preference.</span>
+            </div>
         </div>
 
         <div class="form-grid-3">

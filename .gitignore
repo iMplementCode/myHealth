@@ -10,7 +10,7 @@
 # ── Composer dependencies ────────────────────────────────
 # Installed with `composer install`. Not tracked in git
 # (the previous commit tracked these as broken empty gitlinks).
-/vendor/
+/vendor
 
 # Composer's own installer, when it is downloaded into the project
 # rather than installed system-wide. A 3 MB binary is not source.
