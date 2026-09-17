@@ -1,0 +1,51 @@
+-- ============================================================
+--  An index on the date an invoice was issued
+-- ------------------------------------------------------------
+--  Nearly everything this application reports is "over a period":
+--  today's sales on the dashboard, this month's, the twelve-month
+--  chart, the sales analysis, the profit and loss, the VAT return.
+--  Every one of them filters invoices by issue_date, and every one
+--  of them was reading all 120,000 rows to find the 385 in the
+--  current month.
+--
+--      month's sales     24.2ms  ->   0.7ms
+--      a 30-day report   15.2ms  ->   3.7ms
+--
+--  ── Why only one index ──────────────────────────────────────
+--  Eight were tried against a database seeded to four years of
+--  trading. Seven were dropped again, because an index is not
+--  free: every INSERT and UPDATE on the table maintains it, for
+--  the life of the system, whether or not any query uses it.
+--
+--    invoices (delivery_status)     18.6ms -> 18.4ms. 40,035 of
+--      120,105 rows match, so a sequential scan IS the right plan
+--      and the planner said so by ignoring the index.
+--    audit_logs (action)            49.6ms -> 38.2ms on a filter
+--      dropdown, paid for on every audited action in the whole
+--      application. The dropdown is cached instead.
+--    audit_logs (entity)            not used at all; still a scan.
+--    quote_items (quote_id)         redundant. ux_quote_items_product
+--      is (quote_id, product_id) and a leading column is already an
+--      index on that column.
+--    user_roles (role_id)           no query filters on it. The role
+--      lookup every request performs goes by user_id.
+--
+--  The unindexed foreign keys elsewhere in the schema were left
+--  alone for the same reason: a foreign key with no index is only
+--  a problem if something queries or deletes by it, and nothing
+--  measured here does.
+--
+--  Built plainly, not CONCURRENTLY. On 120,000 invoices this takes
+--  about 90ms, and it holds a write lock for that long — nobody
+--  notices. Should this run one day against a table of millions,
+--  build it by hand first:
+--
+--      CREATE INDEX CONCURRENTLY ix_invoices_issue_date
+--          ON invoices (issue_date);
+--
+--  and the IF NOT EXISTS below turns this migration into a no-op.
+--  CONCURRENTLY cannot be written here because it may not run
+--  inside a transaction block, and a migration file is one.
+-- ============================================================
+
+CREATE INDEX IF NOT EXISTS ix_invoices_issue_date ON invoices (issue_date);

@@ -1,0 +1,36 @@
+# ── Secrets ──────────────────────────────────────────────
+# The real .env holds database credentials and must never be
+# committed. Use .env.example as the template.
+#
+# Unanchored, so it matches at any depth: a copy that ends up in
+# public/ is both a leak and a committed password, and this stops
+# the second half of that.
+.env
+
+# ── Composer dependencies ────────────────────────────────
+# Installed with `composer install`. Not tracked in git
+# (the previous commit tracked these as broken empty gitlinks).
+/vendor/
+
+# Composer's own installer, when it is downloaded into the project
+# rather than installed system-wide. A 3 MB binary is not source.
+/composer.phar
+
+# ── User uploads (keep the folder, ignore the contents) ──
+# Under the document root because a product image has to be
+# fetchable; the .htaccess beside them turns PHP off.
+/public/uploads/products/*
+!/public/uploads/products/.gitkeep
+# These two are deliberately NOT shipped with a .gitkeep. A folder
+# that arrives from git belongs to whoever ran the pull, and on a
+# shared host that is not the web server — which is exactly how
+# "Failed to save logo to server" happened. The application creates
+# them on first use instead, so they belong to the process that has
+# to write to them.
+/public/uploads/company/
+/public/uploads/payments/
+
+# ── OS / editor noise ────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.log

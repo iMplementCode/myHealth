@@ -1,0 +1,24 @@
+# ============================================================
+#  iMplement ERP — application root
+# ------------------------------------------------------------
+#  Nothing in this directory is a web page. Deployed correctly it
+#  sits above the document root and no request can reach it, so
+#  this file should never be consulted at all.
+#
+#  It exists for the deployment that gets it wrong: somebody
+#  uploads the whole project into public_html because that is
+#  where files go on cPanel, and .env — the database password —
+#  becomes a URL. This is what stands there in that moment.
+#
+#  It is not a substitute for putting the application above the
+#  web root. A host with AllowOverride None never reads it.
+# ============================================================
+
+Require all denied
+
+<IfModule !mod_authz_core.c>
+    Order allow,deny
+    Deny from all
+</IfModule>
+
+Options -Indexes

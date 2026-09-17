@@ -1,0 +1,50 @@
+[phases.setup]
+pkgs = ["php"]
+
+#  Three things in the command below are load-bearing.
+#
+#  migrate     applies any pending schema change before the server
+#              starts listening. Forgetting to run it by hand is
+#              silent: the application is written to survive a
+#              database one migration behind, so it keeps working and
+#              the new feature simply never appears. That is how the
+#              two-factor table came to be missing while everything
+#              looked fine.
+#
+#              `|| true` is deliberate and is the important part. A
+#              migration that fails must not stop the web server from
+#              starting — an application serving yesterday's schema is
+#              a shop that can still invoice, and a container that
+#              refuses to start is a shop that cannot. The failure is
+#              printed above, in the deploy log, where it is looked
+#              for.
+#
+#              It waits briefly for a database container that is
+#              still coming up, and takes an advisory lock so the two
+#              containers that overlap during a rolling deploy cannot
+#              both apply the same file. See docs/DEPLOYMENT.md.
+#
+#  router.php  restores the rules that only ever existed in
+#              deploy/nginx.conf and public/uploads/.htaccess. The
+#              built-in server reads neither file, so without this
+#              the private document folders — payment slips, refund
+#              proofs, investor agreements, staff advance receipts —
+#              are served straight off the disk to anyone holding
+#              the URL. See public/router.php.
+#
+#  WORKERS     the built-in server handles ONE request at a time by
+#              default. Rendering a PDF takes a second or two, and
+#              for that second nobody else can load a page, sign in
+#              or save an invoice. Four workers is not a web server,
+#              but it is the difference between a shop that pauses
+#              and a shop that stops.
+#
+#  A note for whoever reads this next: PHP's own manual says this
+#  server "should not be used on a public network". It has no
+#  request timeouts and no connection limits. The application's own
+#  rate limits still apply — they live in the database, not in the
+#  web server — but the ones deploy/nginx.conf provides are gone.
+#  Moving to nginx + php-fpm is worth doing; docs/DEPLOYMENT.md has
+#  that configuration already written and tested.
+[start]
+cmd = "php database_structure/migrate.php || true; PHP_CLI_SERVER_WORKERS=4 php -S 0.0.0.0:3000 -t public public/router.php"

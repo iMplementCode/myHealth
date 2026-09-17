@@ -1,0 +1,21 @@
+# User-uploaded files are served as data, never run. An image that
+# happens to contain PHP must not become a web shell.
+php_flag engine off
+<IfModule mod_headers.c>
+    Header set X-Content-Type-Options "nosniff"
+    Header set Content-Disposition "inline"
+</IfModule>
+<FilesMatch "\.(?!(jpe?g|png|gif|webp|svg|pdf)$)[^.]*$">
+    Require all denied
+</FilesMatch>
+
+# ─── Private documents: Apache's copy of the nginx rule ──────
+#  Payment slips, refund proofs, investor agreements and staff
+#  advance receipts. Served through /documents/view.php, which
+#  checks for a session; never straight off the disk.
+#
+#  On nginx this file is not read at all, which is exactly why
+#  the same rule lives in deploy/nginx.conf. Neither is the only
+#  line of defence — the endpoint checks the session regardless
+#  of how the request arrived.
+RedirectMatch 404 ^/.*/uploads/(payments|refunds|investments|advances)/

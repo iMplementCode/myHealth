@@ -1,0 +1,252 @@
+/* ============================================================
+   iMplement ERP — Form styles (forms.css)
+   Inputs, selects, switches, form cards, auth screen.
+   Depends on style.css tokens.
+   ============================================================ */
+
+/* ─── Form primitives ───────────────────────────────────── */
+.form-group { display: flex; flex-direction: column; gap: 7px; margin-bottom: 4px; }
+.form-label { font-size: 12.5px; font-weight: 600; color: var(--ink); }
+.form-label .req { color: var(--gold); }
+.form-label .opt { color: var(--ink-soft); font-weight: 400; font-size: 11.5px; }
+
+.form-control {
+    width: 100%;
+    padding: 10px 13px;
+    background: var(--panel2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--ink);
+    font-size: 13.5px;
+    font-family: inherit;
+    transition: border-color var(--transition), box-shadow var(--transition);
+}
+.form-control::placeholder { color: var(--ink-muted); }
+.form-control:focus { outline: none; border-color: var(--primary); box-shadow: var(--ring); }
+.form-control:disabled { opacity: 0.6; cursor: not-allowed; }
+textarea.form-control { min-height: 96px; resize: vertical; }
+select.form-control { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%237a7f94' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 36px; }
+
+.hint { font-size: 11.5px; color: var(--ink-soft); }
+.field-err { font-size: 11.5px; color: #fca5a5; display: flex; align-items: center; gap: 5px; }
+.form-group.is-error .form-control { border-color: var(--red); }
+.form-group.is-error .form-control:focus { box-shadow: 0 0 0 3px var(--red-dim); }
+
+/* ─── Layout helpers for forms ──────────────────────────── */
+.form-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 24px;
+    display: flex; flex-direction: column; gap: 16px;
+    max-width: 760px;
+}
+
+/* A form that carries a document's schedule rather than a column of
+   fields. 760px is right for name-and-address; six columns of an
+   equipment table squeeze into it and the last one gets clipped. */
+.form-card--wide { max-width: 1120px; }
+/* Two and three column form rows.
+   auto-fit rather than a fixed count: a three-column row inside a
+   modal had about 180px per column, which is narrower than the
+   labels. The labels wrapped to two and three lines, and because
+   each cell is only as tall as its own content the inputs beside
+   them stopped lining up — "Cost price" sat a line higher than
+   "Selling price". Given a minimum the row now drops to two columns,
+   then one, instead of squeezing.
+
+   min-width: 0 on the children because a grid item will not shrink
+   below its content by default, so a <select> holding a long
+   category name pushed the whole row wider than its container. */
+.form-grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
+.form-grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 16px; }
+.form-grid-2 > *, .form-grid-3 > * { min-width: 0; }
+
+/* Controls line up across a row even when one cell carries a hint
+   underneath. Each group is a flex column stretched to the row's
+   height; without this the group with a <small> after its input —
+   cost price — laid its input out at a different offset from the
+   two beside it. Aligning to the start keeps every control on the
+   same line and lets the hint hang below where it belongs. */
+.form-grid-2 > .form-group, .form-grid-3 > .form-group {
+    align-self: start;
+}
+.form-actions { display: flex; justify-content: flex-end; gap: 10px; padding-top: 8px; border-top: 1px solid var(--border); margin-top: 4px; }
+.form-divider { display: flex; align-items: center; gap: 12px; color: var(--ink-soft); font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; margin: 4px 0; }
+.form-divider::before, .form-divider::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+
+/* Auto-fitting field grid used by the delivery-note forms; spans
+   the full width of its panel rather than the 760px form column. */
+.form-grid {
+    display: grid; gap: 16px; padding: 20px 24px;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+.form-group--wide { grid-column: 1 / -1; }
+/* Action rows sitting directly inside a panel need their own gutter. */
+.panel > .form-actions { padding: 16px 24px; margin-top: 0; align-items: center; }
+.check-inline { display: inline-flex; align-items: center; gap: 8px; margin-right: auto; font-size: 13.5px; }
+.check-inline input { width: 16px; height: 16px; accent-color: var(--primary); }
+.field-note { font-size: 11.5px; color: var(--gold); margin-top: 4px; }
+.form-hint { font-size: 13px; color: var(--ink-soft); margin-bottom: 4px; }
+/* A hint that has become a statement of fact — the balance on the
+   document just chosen, rather than advice about choosing one. */
+.form-hint--strong { color: var(--ink); font-weight: 600; }
+.form-hint--warn { color: var(--gold); }
+
+/* Search box above a long picker. It narrows the list below it, so
+   it sits tight against it and reads as one control. */
+.doc-filter { margin-bottom: -2px; font-size: 13px; }
+.doc-filter.is-empty-search { border-color: var(--gold); }
+.cell-danger { color: #f87171; font-weight: 600; }
+html[data-theme="light"] .cell-danger { color: #b91c1c; }
+
+@media (max-width: 560px) {
+    .form-grid { grid-template-columns: 1fr; padding: 16px; }
+    .form-actions { flex-direction: column-reverse; align-items: stretch; }
+    .check-inline { margin-right: 0; }
+}
+
+/* ─── Input with affix (password show/hide) ─────────────── */
+.input-affix { position: relative; display: flex; }
+.input-affix .form-control { padding-right: 62px; }
+.affix-btn {
+    position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+    background: var(--panel3); border: 1px solid var(--border);
+    color: var(--ink-soft); font-size: 11.5px; font-weight: 600;
+    padding: 5px 10px; border-radius: var(--radius-sm);
+}
+.affix-btn:hover { color: var(--ink); }
+
+.input-group { display: flex; align-items: stretch; }
+.input-prefix { display: inline-flex; align-items: center; padding: 0 12px; background: var(--panel3); border: 1px solid var(--border); border-right: none; border-radius: var(--radius) 0 0 var(--radius); color: var(--ink-soft); font-size: 12.5px; }
+.input-group .form-control { border-radius: 0 var(--radius) var(--radius) 0; }
+
+/* ─── Checkbox ──────────────────────────────────────────── */
+.checkbox { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink-soft); cursor: pointer; }
+.checkbox input { width: 16px; height: 16px; accent-color: var(--primary); }
+
+/* Two or three mutually exclusive choices, side by side and wrapping
+   on a narrow screen rather than pushing the modal wider. */
+.radio-row { display: flex; flex-wrap: wrap; gap: 8px 20px; }
+.radio-row .checkbox { align-items: flex-start; }
+.radio-row .checkbox input { margin-top: 1px; flex: 0 0 16px; }
+
+.form-inline-between { display: flex; align-items: center; justify-content: space-between; }
+/* A field and its unit on one line — "36 months". */
+.form-inline { display: flex; align-items: center; gap: 8px; }
+
+/* ─── Switch toggle ─────────────────────────────────────── */
+.switch-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; cursor: pointer; }
+.switch-title { display: block; font-size: 13.5px; font-weight: 600; }
+.switch-sub { display: block; font-size: 12px; color: var(--ink-soft); }
+.switch { position: relative; display: inline-block; width: 44px; height: 24px; flex-shrink: 0; }
+.switch input { opacity: 0; width: 0; height: 0; }
+.slider { position: absolute; inset: 0; background: var(--panel3); border: 1px solid var(--border); border-radius: 24px; transition: var(--transition); }
+.slider::before { content: ""; position: absolute; height: 18px; width: 18px; left: 2px; top: 2px; background: var(--ink-soft); border-radius: 50%; transition: var(--transition); }
+.switch input:checked + .slider { background: var(--primary-dim); border-color: var(--primary); }
+.switch input:checked + .slider::before { transform: translateX(20px); background: var(--primary); }
+
+/* ─── Auth (login) screen ───────────────────────────────── */
+.auth-body {
+    min-height: 100vh;
+    display: grid; place-items: center;
+    padding: 24px;
+    background:
+        radial-gradient(1000px 500px at 100% 0%, rgba(41,197,240,0.08), transparent 60%),
+        radial-gradient(800px 500px at 0% 100%, rgba(124,58,237,0.08), transparent 60%),
+        var(--bg);
+}
+.auth-wrap { width: 100%; max-width: 400px; display: flex; flex-direction: column; gap: 18px; }
+.auth-card { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 32px; box-shadow: var(--shadow); }
+.auth-brand { display: flex; align-items: center; gap: 14px; margin-bottom: 24px; }
+.auth-brand-text { display: flex; flex-direction: column; }
+.auth-brand-name { font-size: 18px; font-weight: 700; }
+.auth-brand-sub { font-size: 12px; color: var(--ink-soft); }
+.auth-title { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
+.auth-lead { font-size: 13px; color: var(--ink-soft); margin-bottom: 20px; }
+.auth-form { display: flex; flex-direction: column; gap: 16px; margin-top: 8px; }
+.auth-form .btn { margin-top: 4px; }
+.auth-foot { text-align: center; font-size: 12px; color: var(--ink-muted); }
+.auth-card .alert { margin-bottom: 16px; }
+
+/* ─── Responsive ────────────────────────────────────────── */
+@media (max-width: 640px) {
+    .form-grid-2, .form-grid-3 { grid-template-columns: 1fr; }
+    .form-card { padding: 18px; }
+}
+
+/* ─── Margin / profit readout ───────────────────────────── */
+.margin-readout {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 14px; margin: 0 0 4px;
+    background: var(--green-dim); border-radius: var(--radius);
+    font-size: 13.5px;
+}
+.margin-readout.is-loss { background: var(--red-dim); }
+.margin-label { color: var(--ink-soft); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+.margin-value { color: var(--ink); }
+.margin-pill {
+    margin-left: auto; padding: 3px 10px; border-radius: 999px;
+    background: rgba(16, 185, 129, 0.18); color: #6ee7b7; font-weight: 600; font-size: 12.5px;
+}
+.margin-readout.is-loss .margin-pill { background: rgba(239, 68, 68, 0.18); color: #fca5a5; }
+html[data-theme="light"] .margin-pill { color: #067a54; }
+html[data-theme="light"] .margin-readout.is-loss .margin-pill { color: #b91c1c; }
+
+/* ─── Document builder: per-line and document profit ────── */
+.db-line-cell { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+.db-line-margin { font-size: 11px; color: #6ee7b7; white-space: nowrap; }
+.db-line-margin.is-loss { color: #fca5a5; }
+html[data-theme="light"] .db-line-margin { color: #067a54; }
+html[data-theme="light"] .db-line-margin.is-loss { color: #b91c1c; }
+
+.db-t-profit { color: #6ee7b7; }
+.db-t-profit.is-loss { color: #fca5a5; }
+.db-profit-pct {
+    display: inline-block; margin-left: 8px; padding: 1px 8px;
+    border-radius: 999px; background: rgba(16, 185, 129, 0.18);
+    font-size: 11.5px; font-weight: 600;
+}
+.db-t-profit.is-loss .db-profit-pct { background: rgba(239, 68, 68, 0.18); }
+html[data-theme="light"] .db-t-profit { color: #067a54; }
+html[data-theme="light"] .db-t-profit.is-loss { color: #b91c1c; }
+
+/* ─── Auth secondary links ──────────────────────────────── */
+.auth-link { color: var(--primary); font-size: 12.5px; font-weight: 500; }
+.auth-link:hover { text-decoration: underline; }
+.auth-alt { margin-top: 18px; text-align: center; font-size: 13px; color: var(--ink-soft); }
+
+/* ─── Grouped block inside a form ────────────────────────
+   Used where a set of fields only makes sense together —
+   an expense's payment details, for instance. */
+.form-fieldset {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 16px 4px;
+    margin: 4px 0 16px;
+    min-width: 0;               /* fieldsets refuse to shrink otherwise */
+}
+.form-legend {
+    padding: 0 6px;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--ink-soft);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+/* ─── The sign-in code box ──────────────────────────────── */
+/* Six digits read off one screen and typed into another. Large,
+   spaced and centred so a mistyped digit is visible before the
+   form is submitted, and tabular figures so the spacing does not
+   shift as the digits change. */
+.code-input {
+    font-size: 26px;
+    letter-spacing: 12px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+    padding: 14px 10px;
+    /* The letter-spacing puts a gap after the last digit too, which
+       pushes the whole string left of centre. Half of it back. */
+    text-indent: 12px;
+}

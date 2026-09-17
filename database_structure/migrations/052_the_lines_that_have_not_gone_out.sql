@@ -1,0 +1,43 @@
+-- ============================================================
+--  Invoice lines with something still to deliver
+-- ------------------------------------------------------------
+--  Migration 050 kept one index out of eight and said why. This
+--  is a ninth, and it is here because a query was rewritten, not
+--  because the earlier reasoning changed — on the old query shape
+--  this index saved half the time and would not have been worth
+--  having. On the new shape it is the difference between 84ms and
+--  0.8ms.
+--
+--  ── What was slow ───────────────────────────────────────────
+--  The invoice list marks every row with whether anything is
+--  still to go out:
+--
+--      EXISTS (SELECT 1 FROM invoice_items ii
+--               WHERE ii.invoice_id = i.invoice_id
+--                 AND quantity - delivered - credited > 0.0005)
+--
+--  PostgreSQL plans that subquery before it knows a LIMIT 10 is
+--  coming, decides hashing the whole thing beats looping, and
+--  sequentially scans all 300,250 invoice lines to draw ten rows
+--  on a screen. The list is written as a LATERAL now, which says
+--  loop; then this index makes each of the ten probes free:
+--
+--      EXISTS, no index        166ms
+--      EXISTS, this index       84ms   (still scanning everything)
+--      LATERAL, no index        54ms
+--      LATERAL, this index     0.8ms
+--
+--  ── Why partial ─────────────────────────────────────────────
+--  The predicate is the question being asked, so the index holds
+--  only the lines that answer yes — a line fully delivered drops
+--  out of it. On the test ledger that is 4.7 MB against a 27 MB
+--  table, and it shrinks as goods go out, which is the direction
+--  an index over a backlog ought to move in.
+--
+--  The expression must be written here exactly as the query
+--  writes it, or the planner will not match them.
+-- ============================================================
+
+CREATE INDEX IF NOT EXISTS ix_invoice_items_undelivered
+    ON invoice_items (invoice_id)
+    WHERE quantity - delivered_quantity - credited_quantity > 0.0005;

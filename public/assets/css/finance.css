@@ -1,0 +1,450 @@
+/* ============================================================
+ *  Finance — cash book and daily position
+ * ------------------------------------------------------------
+ *  Keeps the shape of the spreadsheet these reports replace: a
+ *  blue date bar, highlighted cash and revenue rows, and three
+ *  columns per day. Colour is used where the sheet used it and
+ *  nowhere else, so the highlights still mean something.
+ * ============================================================ */
+
+/* ─── Cash book ─────────────────────────────────────────────── */
+
+/* The blue bar the sheet used to separate one day from the next. */
+.cashbook-daybreak th,
+.cashbook-daybreak td {
+    background: var(--primary-dim);
+    border-top: 2px solid var(--primary);
+    color: var(--ink);
+    font-weight: 600;
+    font-size: 13px;
+    letter-spacing: 0.01em;
+    padding-top: 10px;
+    padding-bottom: 10px;
+}
+
+.cashbook-table td,
+.cashbook-table th { vertical-align: middle; }
+
+/* IN / OUT pill — the sheet's most-scanned column. */
+.inout {
+    display: inline-block;
+    min-width: 44px;
+    padding: 2px 8px;
+    border-radius: var(--radius-sm);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+}
+.inout--in  { background: var(--green-dim); color: var(--green); }
+.inout--out { background: var(--red-dim);   color: var(--red); }
+
+.tone-in  { color: var(--green); }
+.tone-out { color: var(--red); }
+
+/* ─── Daily position ────────────────────────────────────────── */
+
+.position-day {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    margin-bottom: 22px;
+    overflow: hidden;
+}
+
+.position-daybar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    padding: 12px 18px;
+    background: var(--primary-dim);
+    border-bottom: 1px solid var(--border);
+}
+.position-daybar h2 {
+    font-size: 15px;
+    font-weight: 600;
+    margin: 0;
+    color: var(--ink);
+}
+.position-daybar-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.position-warning {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin: 0;
+    padding: 10px 18px;
+    background: var(--red-dim);
+    color: var(--red);
+    font-size: 13px;
+    border-bottom: 1px solid var(--border);
+}
+.position-warning svg { width: 18px; height: 18px; flex: none; margin-top: 1px; }
+
+/* Three blocks per day, as on the sheet. They stack on narrow
+   screens rather than scrolling sideways — these are figures to
+   read, not a wide table to pan across. */
+.position-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1px;
+    background: var(--border);
+}
+
+/* A grid item's minimum width defaults to `auto`, which means
+   "never narrower than my own content". One long unbreakable
+   thing inside a column — a product name with no spaces, a
+   paragraph that forgot to wrap — then widens the whole grid past
+   the edge of the page instead of wrapping inside it. Saying zero
+   lets the column shrink to its share, whatever it is given. */
+.position-grid > * { min-width: 0; }
+
+.position-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--panel);
+}
+.position-table th,
+.position-table td {
+    padding: 9px 18px;
+    font-size: 13.5px;
+    border-bottom: 1px solid var(--border-lt);
+}
+.position-table th {
+    text-align: left;
+    font-weight: 400;
+    color: var(--ink-soft);
+}
+.position-table td {
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+    /* An amount split across two lines is unreadable in a column of
+       figures, so the label wraps instead. */
+    white-space: nowrap;
+    width: 1%;
+}
+.position-table tr:last-child th,
+.position-table tr:last-child td { border-bottom: 0; }
+
+.position-sub th { padding-left: 32px; font-size: 12.5px; }
+.position-sub td { color: var(--ink-soft); }
+
+/* Section heading inside a statement column — Assets, Liabilities,
+   Cash movement. Small and quiet: it separates, it does not shout. */
+.position-head th {
+    padding-top: 14px;
+    padding-bottom: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    border-bottom: 1px solid var(--border);
+}
+.position-table tr:first-child.position-head th { padding-top: 10px; }
+
+/* A qualifier under a line label — "at cost", "unpaid invoices".
+   On its own line: run inline it reads as part of the label and
+   turns "Trade receivables" into "Trade receivables unpaid
+   invoices". */
+.position-table th .cell-muted {
+    display: block;
+    font-size: 11.5px;
+    font-weight: 400;
+    line-height: 1.3;
+    margin-top: 1px;
+}
+
+.mini-value--text { font-size: 18px; }
+
+/* Document numbers are identifiers, not prose. Wrapping one across
+   three lines — which the extra payment columns made happen — is
+   worse than a slightly wider column. Amounts and short labels get
+   the same treatment: a figure split over two lines is harder to
+   read than a wider column, and a wrapped pill doubles the row
+   height for every row in the table. */
+.data-table .cell-title,
+.data-table .role-pill,
+.data-table .ta-right { white-space: nowrap; }
+
+.position-subtotal th,
+.position-subtotal td {
+    font-weight: 600;
+    color: var(--ink);
+    background: var(--panel2);
+}
+
+/* The sheet highlighted cash at hand in yellow and operating
+   revenue in green. Same meaning, brand palette. */
+.position-highlight th,
+.position-highlight td {
+    background: var(--gold-dim);
+    color: var(--gold);
+    font-weight: 600;
+}
+.position-revenue th,
+.position-revenue td {
+    background: var(--green-dim);
+    color: var(--green);
+    font-weight: 600;
+}
+.position-valuation th,
+.position-valuation td {
+    background: var(--panel3);
+    color: var(--ink);
+    font-weight: 700;
+    font-size: 14.5px;
+}
+
+/* Marks a figure that is today's live value rather than one
+   captured on the day being shown. */
+.position-live {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 1px 6px;
+    border-radius: var(--radius-sm);
+    background: var(--violet-dim);
+    color: var(--violet);
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+}
+
+.position-note {
+    font-size: 12px;
+    max-width: 34ch;
+    line-height: 1.35;
+}
+
+.toolbar-inline-label {
+    font-size: 13px;
+    color: var(--ink-soft);
+    align-self: center;
+    white-space: nowrap;
+}
+.toolbar-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.u-pad { padding: 12px 18px; }
+.u-nomargin { margin: 0; }
+
+/* ─── Print ─────────────────────────────────────────────────── */
+/*  The position report is the one page people still take to a
+    meeting on paper, so it prints as a clean document.          */
+@media print {
+    .toolbar,
+    .position-daybar-actions,
+    .mini-grid { display: none !important; }
+
+    .position-day {
+        border: 1px solid #999;
+        break-inside: avoid;
+        page-break-inside: avoid;
+        margin-bottom: 14px;
+    }
+    .position-grid { grid-template-columns: repeat(3, 1fr); gap: 0; }
+    .position-table th,
+    .position-table td { padding: 5px 10px; font-size: 11px; }
+    .position-daybar { background: #eaf6fb; }
+    .position-highlight th, .position-highlight td { background: #fff6dc; color: #7a5400; }
+    .position-revenue  th, .position-revenue  td { background: #e6f7f0; color: #0a6b4d; }
+}
+
+/* ─── Credit notes and goods returns ────────────────────────── */
+
+/* Line editors built in JS: a name that can wrap, and numeric
+   inputs that keep their width so a column of them stays a
+   column. */
+.cn-lines { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+
+.cn-line {
+    display: grid;
+    grid-template-columns: 1fr 110px;
+    gap: 10px;
+    align-items: center;
+    padding: 8px 10px;
+    background: var(--panel2);
+    border: 1px solid var(--border-lt);
+    border-radius: var(--radius-sm);
+}
+.cn-line--return { grid-template-columns: 1fr 80px 110px 120px; }
+
+.cn-line-name { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.cn-line-name strong { font-size: 13.5px; }
+.cn-line-name span { font-size: 11.5px; }
+.cn-line-expected {
+    font-size: 13px;
+    color: var(--ink-soft);
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.db-head--return {
+    display: grid;
+    grid-template-columns: 1fr 80px 110px 120px;
+    gap: 10px;
+    padding: 0 10px 6px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+}
+
+/* Two panels side by side on the credit-note page. */
+.position-grid-2 {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 16px;
+    margin-bottom: 18px;
+}
+
+.panel-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    padding: 14px 18px;
+    border-top: 1px solid var(--border);
+}
+
+/* The cancelled-invoice warning, used outside a day panel. */
+.u-round {
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border);
+    margin-bottom: 16px;
+}
+
+@media (max-width: 720px) {
+    .cn-line, .cn-line--return, .db-head--return { grid-template-columns: 1fr; }
+    .db-head--return { display: none; }
+}
+
+/* ─── Reports hub ────────────────────────────────────────── */
+.report-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 14px;
+    padding: 0 24px 8px;
+}
+.report-card {
+    display: block;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 18px 20px;
+    text-decoration: none;
+    color: inherit;
+    transition: var(--transition);
+}
+.report-card:hover {
+    border-color: var(--primary);
+    transform: translateY(-2px);
+}
+.report-card-stat  { display: block; font-size: 22px; font-weight: 700; letter-spacing: -0.01em; }
+.report-card-label { display: block; font-size: 12px; color: var(--ink-soft); margin-bottom: 12px; }
+.report-card-title { font-size: 15px; font-weight: 700; margin: 0 0 4px; }
+.report-card-blurb { font-size: 13px; color: var(--ink-soft); margin: 0; line-height: 1.5; }
+
+/* A paragraph of explanation inside a figures table.
+ *
+ * Every other cell in these tables holds a number, and a number
+ * split across two lines is unreadable in a column of figures — so
+ * `.position-table td` is `nowrap` and sized to its content. Prose
+ * is the one exception, and until it said so it inherited both:
+ * the paragraph became a single unbreakable line, the table's
+ * minimum width grew to the length of that sentence, the grid
+ * column could not shrink below it, and the panel ran off the
+ * right-hand side of the page — over the top of everything on
+ * Profit and Loss and on the VAT Summary.
+ *
+ * `vertical-align: top` matters for the same layout: the columns
+ * stretch to equal height so the hairline between them runs the
+ * full way down, which would otherwise centre a short note in a
+ * tall cell and leave a gap above it.
+ *
+ * The selector is qualified for a reason: `.position-table td` is
+ * (0,1,1) and a bare `.report-note` is (0,1,0), so the class alone
+ * loses to it however far down the file it sits. Specificity is
+ * not resolved by order. */
+.position-table td.report-note,
+.report-note {
+    font-size: 12.5px;
+    color: var(--ink-soft);
+    line-height: 1.6;
+    padding: 12px 16px;
+    white-space: normal;
+    width: auto;
+    vertical-align: top;
+}
+.report-note p { margin: 0 0 8px; }
+.report-note p:last-child { margin-bottom: 0; }
+
+.report-caveat { padding: 18px 24px; margin-top: 4px; }
+.report-caveat-title { font-size: 14px; font-weight: 700; margin: 0 0 8px; display: flex; align-items: center; gap: 8px; }
+.report-caveat-title svg { width: 16px; height: 16px; color: var(--gold); }
+.report-caveat p { font-size: 13px; color: var(--ink-soft); line-height: 1.6; margin: 0 0 8px; }
+.report-caveat p:last-child { margin-bottom: 0; }
+
+/* Totals row at the foot of a report table. */
+.table-total th, .table-total td {
+    border-top: 2px solid var(--border);
+    padding-top: 12px;
+    font-weight: 700;
+}
+
+/* ─── Customer statement ─────────────────────────────────── */
+.statement-sheet { padding-top: 4px; }
+.statement-head {
+    display: flex; justify-content: space-between; gap: 24px; flex-wrap: wrap;
+    padding: 20px 24px 16px;
+    border-bottom: 1px solid var(--border);
+}
+.statement-title { font-size: 17px; font-weight: 700; margin: 0; }
+.statement-sub   { font-size: 13px; color: var(--ink-soft); margin: 2px 0 0; }
+.statement-party { text-align: right; font-size: 13px; line-height: 1.6; }
+.statement-party strong { display: block; font-size: 14px; }
+.statement-party span   { display: block; color: var(--ink-soft); }
+.statement-opening td, .statement-opening th { background: var(--panel2); }
+.statement-foot { padding: 16px 24px 20px; font-size: 12.5px; line-height: 1.6; }
+.statement-foot p { margin: 0 0 6px; }
+
+@media (max-width: 640px) {
+    .statement-party { text-align: left; }
+}
+
+/* A qualifier under a headline figure — "at cost", "shrinkage".
+   Quiet, and on its own line so it reads as a footnote rather
+   than as part of the number. */
+.mini-sub { display: block; font-size: 11.5px; color: var(--ink-soft); margin-top: 2px; }
+
+/* ─── Stock count sheet ─────────────────────────────────────── */
+/* A column of numbers being typed at a shelf. The inputs are kept
+   narrow so a line still reads as one line, and each row is
+   tinted by what it found — which is the thing the person
+   counting is actually scanning for. */
+.stk-table td { vertical-align: middle; }
+.stk-qty { max-width: 110px; margin-left: auto; text-align: right; font-variant-numeric: tabular-nums; }
+.stk-reason { min-width: 190px; }
+.stk-note { min-width: 140px; }
+
+.stk-row--agreed td:first-child { box-shadow: inset 3px 0 0 var(--green); }
+.stk-row--short  td:first-child { box-shadow: inset 3px 0 0 var(--red); }
+.stk-row--over   td:first-child { box-shadow: inset 3px 0 0 var(--gold); }
+
+/* The summary sits on the same row as the save button and should
+   take the space the button does not. */
+.panel-actions .form-hint { margin: 0 auto 0 0; }
+
+@media print {
+    /* A printed sheet is for writing on: the counted column is left
+       blank on purpose, and nothing else needs to be there. */
+    .stk-qty, .stk-note { border: 1px solid #999; min-height: 22px; }
+    .stk-reason, .toolbar, .form-actions, .report-caveat { display: none !important; }
+}

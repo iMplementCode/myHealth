@@ -1,0 +1,82 @@
+# ============================================================
+#  iMplement ERP — document root (Apache / cPanel)
+# ------------------------------------------------------------
+#  This directory is the only one the web server may see. The
+#  application, its configuration and the database password live
+#  one level above it and are unreachable by any request, so
+#  these rules are the second line of defence rather than the
+#  only one.
+#
+#  Rules that cannot be relied on alone: a host may ship
+#  AllowOverride None, in which case none of this file is read.
+#  That is exactly why the secrets are not in here to begin with.
+# ============================================================
+
+# ─── Serve this directory ───────────────────────────────────
+# Explicit, and not redundant. Apache inherits .htaccess into
+# subdirectories, and the application root one level up says
+# "Require all denied" — which is right for that directory and
+# would be inherited straight into this one.
+#
+# That matters whenever the project sits inside the web root:
+# XAMPP under htdocs, or a cPanel account where the whole project
+# was uploaded into public_html. Without this line the deny-all
+# reaches every page and the site answers 403 Forbidden, with the
+# secrets protected and the application unreachable along with
+# them. Deployed properly — the project above the document root —
+# nothing is inherited and this line simply states the obvious.
+Require all granted
+
+<IfModule !mod_authz_core.c>
+    Order allow,deny
+    Allow from all
+</IfModule>
+
+# No directory listings. An index of /uploads is a shopping list.
+Options -Indexes
+
+# Never serve dotfiles. Nothing here should be one, but an editor
+# swap file or a stray .env copied into place must not be readable.
+<FilesMatch "^\.">
+    Require all denied
+</FilesMatch>
+
+# Belt and braces for the names that matter most, in case a file
+# is ever put here by mistake.
+<FilesMatch "^(\.env.*|composer\.(json|lock)|.*\.(sql|sqlite|db|log|bak|old|orig|save|swp|dist|ini|sh))$">
+    Require all denied
+</FilesMatch>
+
+# Do not advertise what is running.
+<IfModule mod_headers.c>
+    Header unset X-Powered-By
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set X-Frame-Options "SAMEORIGIN"
+    Header always set Referrer-Policy "same-origin"
+</IfModule>
+
+# ─── HTTPS ──────────────────────────────────────────────────
+# cPanel terminates TLS ahead of Apache, so the scheme arrives in
+# a header rather than on the connection. Redirect once, at the
+# edge, before a session cookie can travel in clear.
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteCond %{HTTPS} !=on
+    RewriteCond %{HTTP:X-Forwarded-Proto} !=https
+    RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+</IfModule>
+
+# ─── Reaching above the document root ───────────────────────
+# Traversal is the web server's job to refuse, and it does. This
+# catches the encoded forms some scanners try, so they are turned
+# away here rather than reaching PHP at all.
+<IfModule mod_rewrite.c>
+    RewriteCond %{THE_REQUEST} (\.\./|%2e%2e|%252e) [NC]
+    RewriteRule ^ - [F,L]
+</IfModule>
+
+# ─── PHP settings, where the host allows them ───────────────
+<IfModule mod_php.c>
+    php_flag display_errors off
+    php_flag expose_php off
+</IfModule>

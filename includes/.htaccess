@@ -1,0 +1,3 @@
+# Library and schema files — not web pages. Deny outright: the app
+# includes them from PHP, which the web server never sees.
+Require all denied

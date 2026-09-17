@@ -1,0 +1,112 @@
+/* ============================================================
+   iMplement ERP — Dashboard styles (dashboard.css)
+   Summary cards, mini metrics, quick actions, charts, feeds.
+   Depends on style.css tokens.
+   ============================================================ */
+
+/* ─── Summary cards ─────────────────────────────────────── */
+.stat-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+}
+.stat-card {
+    display: flex; align-items: center; gap: 14px;
+    padding: 18px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    transition: transform var(--transition), border-color var(--transition);
+}
+.stat-card:hover { transform: translateY(-2px); border-color: var(--ink-muted); }
+.stat-ic {
+    width: 46px; height: 46px;
+    display: grid; place-items: center;
+    border-radius: 12px;
+    flex-shrink: 0;
+}
+.stat-ic svg { width: 22px; height: 22px; }
+.stat-body { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.stat-label { font-size: 12px; color: var(--ink-soft); font-weight: 500; }
+.stat-value { font-size: 20px; font-weight: 700; letter-spacing: -0.02em; white-space: nowrap; }
+
+.stat-card--primary .stat-ic { background: var(--primary-dim); color: var(--primary); }
+.stat-card--green   .stat-ic { background: var(--green-dim);   color: var(--green); }
+.stat-card--violet  .stat-ic { background: var(--violet-dim);  color: #a78bfa; }
+.stat-card--gold    .stat-ic { background: var(--gold-dim);    color: var(--gold); }
+
+/* ─── Mini metrics ──────────────────────────────────────── */
+.mini-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+.mini-card {
+    padding: 16px 18px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    display: flex; flex-direction: column; gap: 6px;
+}
+.mini-label { font-size: 12px; color: var(--ink-soft); }
+.mini-value { font-size: 18px; font-weight: 700; }
+.mini-card--warn { border-color: rgba(240,180,41,0.4); }
+.mini-card--warn .mini-value { color: var(--gold); }
+.mini-card--danger { border-color: rgba(239,68,68,0.4); }
+.mini-card--danger .mini-value { color: var(--red); }
+
+/* ─── Quick actions ─────────────────────────────────────── */
+.shortcut-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 12px;
+    padding: 18px;
+}
+.shortcut {
+    display: flex; flex-direction: column; align-items: center; gap: 10px;
+    padding: 18px 12px;
+    background: var(--panel2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    text-align: center;
+    transition: var(--transition);
+}
+.shortcut:hover { border-color: var(--primary); background: var(--panel3); transform: translateY(-2px); }
+.shortcut-ic {
+    width: 42px; height: 42px;
+    display: grid; place-items: center;
+    border-radius: 11px;
+    background: var(--primary-dim);
+    color: var(--primary);
+}
+.shortcut-ic svg { width: 20px; height: 20px; }
+.shortcut-label { font-size: 12.5px; font-weight: 600; }
+
+/* ─── Charts ────────────────────────────────────────────── */
+.chart-row { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.chart-panel .panel-head { align-items: baseline; }
+.chart-wrap { padding: 18px; position: relative; min-height: 200px; }
+.chart-empty { text-align: center; color: var(--ink-soft); padding: 60px 0; font-size: 13px; }
+
+/* ─── Activity feed ─────────────────────────────────────── */
+.activity-row { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; }
+.feed { list-style: none; }
+.feed-item {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border-lt);
+}
+.feed-item:last-child { border-bottom: none; }
+.feed-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.feed-title { font-weight: 600; font-size: 13.5px; }
+.feed-sub { font-size: 12px; color: var(--ink-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.feed-meta { display: flex; align-items: center; gap: 10px; }
+.feed-amount { font-weight: 600; font-size: 13px; white-space: nowrap; }
+.feed-date { font-size: 12px; color: var(--ink-soft); white-space: nowrap; }
+.feed-empty { padding: 32px 20px; text-align: center; color: var(--ink-soft); font-size: 13px; }
+
+/* ─── Responsive ────────────────────────────────────────── */
+@media (max-width: 1100px) {
+    .stat-grid { grid-template-columns: repeat(2, 1fr); }
+    .mini-grid { grid-template-columns: repeat(2, 1fr); }
+    .chart-row, .activity-row { grid-template-columns: 1fr; }
+}
+@media (max-width: 480px) {
+    .stat-grid, .mini-grid { grid-template-columns: 1fr; }
+}
