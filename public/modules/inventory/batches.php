@@ -27,6 +27,7 @@
 
 require_once __DIR__ . '/../bootstrap.php';
 require_once __DIR__ . '/../../../includes/batches.php';
+require_once __DIR__ . '/../../../includes/disposals.php';
 require_once __DIR__ . '/../../../includes/pharmacy.php';
 require_once __DIR__ . '/../../../includes/icons.php';
 
@@ -35,6 +36,30 @@ require_once __DIR__ . '/../../../includes/icons.php';
     still good" without fetching a manager.                     */
 
 $batchId = input_int($_GET, 'batch_id');
+
+/* ── Writing stock off ──────────────────────────────────────
+ *  Destroying stock is the Manager's to authorise, so the guard
+ *  is here on the write rather than on the page: the counter
+ *  still needs to read what is on the shelf.
+ */
+if (is_post() && ($_POST['_action'] ?? '') === 'write_off') {
+    require_role(ROLE_MANAGER);
+    if (!csrf_verify($_POST['csrf_token'] ?? null)) {
+        flash('error', 'That form had gone stale. Try again.');
+        redirect('modules/inventory/batches.php?batch_id=' . (int) ($_POST['batch_id'] ?? 0));
+    }
+
+    $result = disposal_write_off(
+        (int) ($_POST['batch_id'] ?? 0),
+        (float) ($_POST['quantity'] ?? 0),
+        (string) ($_POST['reason'] ?? ''),
+        trim((string) ($_POST['notes'] ?? '')),
+        trim((string) ($_POST['witnessed_by'] ?? ''))
+    );
+
+    flash($result['ok'] ? 'success' : 'error', $result['message']);
+    redirect('modules/inventory/batches.php?batch_id=' . (int) ($_POST['batch_id'] ?? 0));
+}
 
 /* ═══ One batch: the recall trace ═══════════════════════════ */
 if ($batchId) {
@@ -51,8 +76,15 @@ if ($batchId) {
     }
 
     $trace     = batch_trace($batchId);
+    $disposals = disposals_for_batch($batchId);
+    $canWrite  = is_admin() || user_has_role(ROLE_MANAGER);
     $went      = batch_trace_total($trace);
+    $disposed  = array_sum(array_map(static fn(array $d): float => (float) $d['quantity'], $disposals));
+    //  Received minus remaining is everything that left. Dispensing
+    //  explains part of it and disposal explains the rest; what is
+    //  left over after both is the part nobody can account for.
     $accounted = (float) $batch['quantity_received'] - (float) $batch['quantity_remaining'];
+    $unexplained = $accounted - $went - $disposed;
     [$stateLabel, $stateTone] = batch_state_label((string) $batch['state']);
     $uom = (string) ($batch['uom_abbr'] ?: '');
 
@@ -115,14 +147,14 @@ if ($batchId) {
               a hand-edit — and a recall list built from the trace
               is short by exactly that much. Better said out loud
               than quietly wrong.                                */ ?>
-    <?php if (abs($accounted - $went) > 0.0005): ?>
+    <?php if (abs($unexplained) > 0.0005): ?>
         <div class="alert alert--warning" role="status">
             <span>
-                <strong><?= e(num(abs($accounted - $went), 2)) ?></strong>
+                <strong><?= e(num(abs($unexplained), 2)) ?></strong>
                 <?= e($uom ?: 'units') ?> of this batch left the shelf without being
-                dispensed through the counter, so they are not in the list below.
-                A stock take or a manual adjustment does this. The recall list is
-                short by that much.
+                dispensed through the counter and without being written off,
+                so they are not in the list below. A stock take or a manual
+                adjustment does this. The recall list is short by that much.
             </span>
         </div>
     <?php endif; ?>
@@ -191,6 +223,120 @@ if ($batchId) {
             </table>
         </div>
     </div>
+
+    <?php /*  Written off already. Shown above the form, because the
+              first question somebody opening this page asks is
+              whether the shelf was already cleared — and doing it
+              twice takes stock that is not there.               */ ?>
+    <?php if ($disposals): ?>
+        <div class="panel">
+            <div class="panel-head">
+                <h2 class="panel-title">Written off</h2>
+                <span class="hint"><?= e(num($disposed, 2)) ?> <?= e($uom) ?> destroyed</span>
+            </div>
+            <div class="table-wrap">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>When</th>
+                            <th>Reason</th>
+                            <th>Witnessed by</th>
+                            <th>Recorded by</th>
+                            <th>Note</th>
+                            <th class="ta-right">Quantity</th>
+                            <th class="ta-right">Value</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($disposals as $d): ?>
+                            <tr>
+                                <td><?= e(fmt_date($d['disposed_at'])) ?></td>
+                                <td><?= e(DISPOSAL_REASONS[$d['reason']] ?? $d['reason']) ?></td>
+                                <td><?= e($d['witnessed_by'] ?: '—') ?></td>
+                                <td><?= e($d['disposed_by_name'] ?: '—') ?></td>
+                                <td><?= e($d['notes'] ?: '—') ?></td>
+                                <td class="ta-right"><?= e(num($d['quantity'], 2)) ?></td>
+                                <td class="ta-right">
+                                    <?= e(money((float) $d['quantity'] * (float) ($d['unit_cost'] ?? 0))) ?>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    <?php endif; ?>
+
+    <?php if ($canWrite && (float) $batch['quantity_remaining'] > 0): ?>
+        <div class="panel">
+            <div class="panel-head">
+                <h2 class="panel-title">Write stock off</h2>
+            </div>
+            <form method="POST" action="<?= e(url('modules/inventory/batches.php')) ?>" class="u-pad">
+                <?= csrf_field() ?>
+                <input type="hidden" name="_action" value="write_off">
+                <input type="hidden" name="batch_id" value="<?= (int) $batch['batch_id'] ?>">
+
+                <p class="hint">
+                    For stock that has physically left the shelf and cannot be sold.
+                    This is not a stock count: it records that <em>this</em> batch was
+                    destroyed, on this date, for this reason.
+                </p>
+
+                <div class="form-grid-2">
+                    <div class="form-group">
+                        <label class="form-label" for="quantity">
+                            Quantity <span class="req">*</span>
+                        </label>
+                        <input type="number" id="quantity" name="quantity" class="form-control"
+                               min="0.001" step="any"
+                               max="<?= e((string) $batch['quantity_remaining']) ?>"
+                               value="<?= e($batch['state'] === 'expired'
+                                             ? (string) $batch['quantity_remaining'] : '') ?>"
+                               required>
+                        <?php /*  An expired batch is almost always destroyed whole,
+                                  so it is filled in. Anything else starts empty:
+                                  a pre-filled number somebody did not mean to
+                                  accept is how the wrong quantity gets written. */ ?>
+                        <span class="hint"><?= e(num($batch['quantity_remaining'], 2)) ?> <?= e($uom) ?> available</span>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="reason">Reason <span class="req">*</span></label>
+                        <select id="reason" name="reason" class="form-control" required>
+                            <?php foreach (DISPOSAL_REASONS as $k => $label): ?>
+                                <option value="<?= e($k) ?>"
+                                    <?= ($batch['state'] === 'expired' && $k === 'expired') ? 'selected' : '' ?>>
+                                    <?= e($label) ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="witnessed_by">Witnessed by</label>
+                        <input type="text" id="witnessed_by" name="witnessed_by" class="form-control"
+                               maxlength="160" placeholder="Name of the second person present">
+                        <?php if ($batch['controlled_schedule']): ?>
+                            <span class="hint">
+                                This is a controlled drug. Destruction is supposed to be
+                                witnessed, and this system can only record the name &mdash;
+                                it cannot confirm anybody was there.
+                            </span>
+                        <?php endif; ?>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="notes">Note</label>
+                        <input type="text" id="notes" name="notes" class="form-control"
+                               maxlength="255" placeholder="Anything worth recording">
+                    </div>
+                </div>
+
+                <button type="submit" class="btn btn-primary">Write off</button>
+            </form>
+        </div>
+    <?php endif; ?>
 
     <?php
     require __DIR__ . '/../../../includes/footer.php';

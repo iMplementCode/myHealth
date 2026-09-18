@@ -102,12 +102,19 @@ something nobody chose, and `invoice_items` is uniquely indexed on
 maintained by different code — a stock take adjusts one, a sale the
 other. The first anybody notices is a sale refused for stock the
 screen says is there. `batch_drift()` in `includes/dispensing.php`
-finds them; there is no screen for it yet.
+finds them across the catalogue; there is still no screen listing
+them all. Per batch, the trace page says so directly: anything that
+left without being dispensed or written off is named as a quantity
+the recall list is short by.
 
-**Expired stock stays in the batch.** Deliberately: somebody has to
-physically pull it off the shelf, and zeroing it in the system
-would mean nobody ever does. It is excluded from everything
-sellable and reported separately.
+**Expired stock stays in the batch until somebody writes it off.**
+Deliberately: somebody has to physically pull it off the shelf, and
+zeroing it in the system would mean nobody ever does. It is excluded
+from everything sellable and reported separately. When it has been
+destroyed, record that on **Inventory &rarr; Batches & Expiry** &rarr;
+the batch &rarr; *Write stock off*, which takes it out of the batch,
+out of the headline figure and out of the valuation, and keeps a
+dated record of the reason and the witness.
 
 **A returned box goes back to its own batch**, never to whichever
 batch is convenient — a returned box has an expiry printed on it,
@@ -125,7 +132,7 @@ Be straight with customers about these.
 
 | | |
 |---|---|
-| **Controlled-substances register** | The flag is recorded. The bound register a PPB inspector asks for is not built. `batch_allocations` holds the data it would need. |
+| **Controlled-substances register** | Built — Reports &rarr; Controlled Drugs. Derived from recorded receipts and dispensing, with a running balance. Entries are **not individually signed or witnessed**, so where the law requires a bound register this does not replace it. |
 | **Allergy checking** | Allergies are shown, never matched. Free text cannot be matched safely — "pen VK" is penicillin and no substring search will know. |
 | **Prescriptions as records** | The counter stores a prescriber name and reference on the invoice. A real prescription — patient, dose, frequency, duration, refills, partial fills — belongs with the patient record and is not here. |
 | **Insurance / SHA claims** | The membership number is stored. Nothing batches or submits claims. |
@@ -142,4 +149,9 @@ Be straight with customers about these.
 | `includes/counter.php` | What a sale is allowed to be. |
 | `includes/patients.php` | The patient record. |
 | `public/counter/index.php` | The screen. Displays; does not judge. |
-| Migrations 060–064 | CCTV removed, drugs, batch allocations, the counter, patients. |
+| `includes/batches.php` | Reading batches and the recall trace. Reads only. |
+| `includes/disposals.php` | Writing stock off, and why it — unlike dispensing — moves the headline figure too. |
+| `includes/controlled.php` | The controlled drugs register, derived from receipts and issues. |
+| `public/modules/inventory/batches.php` | What is on the shelf, what dies when, and where a batch went. |
+| `public/reports/controlled_register.php` | The register, per drug, with a running balance. |
+| Migrations 060–065 | CCTV removed, drugs, batch allocations, the counter, patients, disposals. |
