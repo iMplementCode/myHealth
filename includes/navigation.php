@@ -100,6 +100,13 @@ function nav_items(): array
                 ['label' => 'Cash Book', 'icon' => 'book',          'href' => 'finance/cashbook.php'],
                 ['label' => 'Cash Count', 'icon' => 'calc',         'href' => 'finance/cash_count.php'],
                 ['label' => 'Cash & Bank Accounts', 'icon' => 'wallet', 'href' => 'finance/accounts.php'],
+                //  Double entry. The chart is the list every figure
+                //  lands on; the journal is where the ones no document
+                //  produces get typed.
+                ['label' => 'Chart of Accounts', 'icon' => 'layers', 'href' => 'finance/chart_of_accounts.php',
+                 'roles' => [ROLE_ADMIN, ROLE_MANAGER]],
+                ['label' => 'Journal', 'icon' => 'file', 'href' => 'finance/journal.php',
+                 'roles' => [ROLE_ADMIN, ROLE_MANAGER]],
                 ['label' => 'Invoice Payments', 'icon' => 'money',   'href' => 'invoices/payments.php'],
                 ['label' => 'Customer Advances', 'icon' => 'in',  'href' => 'finance/advances.php'],
                 ['label' => 'Staff Loans', 'icon' => 'user',        'href' => 'finance/loans.php'],

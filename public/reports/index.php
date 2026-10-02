@@ -34,6 +34,9 @@ $stockCost = array_sum(array_map(fn($r) => (float) $r['value_at_cost'], $stock))
 //  How many drugs need a register at all. Zero is a legitimate
 //  answer for a shop that holds none, and the card says so
 //  rather than hiding.
+$journalEntries = table_exists('journal_entries')
+    ? (int) db_value('SELECT COUNT(*) FROM journal_entries')
+    : 0;
 $controlledCount = (int) db_value(
     "SELECT COUNT(*) FROM products
       WHERE controlled_schedule IS NOT NULL AND controlled_schedule <> ''"
@@ -99,6 +102,14 @@ $REPORTS = [
         'blurb' => 'One supplier\'s account movement by movement — goods in, goods back, money paid. What to reconcile theirs against.',
         'stat'  => num($paySuppliers),
         'label' => 'supplier' . ($paySuppliers === 1 ? '' : 's') . ' with a balance',
+        'tone'  => '',
+    ],
+    [
+        'title' => 'Trial Balance',
+        'href'  => 'reports/trial_balance.php',
+        'blurb' => 'Every account with both its sides, and the ledger behind any line of it. Checks the journal against the documents and says when they disagree.',
+        'stat'  => num($journalEntries),
+        'label' => 'journal entr' . ($journalEntries === 1 ? 'y' : 'ies') . ' posted',
         'tone'  => '',
     ],
     [
