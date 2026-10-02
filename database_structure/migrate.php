@@ -153,6 +153,30 @@ while (true) {
         if ($answered || time() >= $waitUntil) {
             fwrite(STDERR, "\n  ✗ FAIL  " . $e->getMessage() . "\n");
 
+            /*  What it actually tried, and where the settings came
+                from. Without this the advice below sends somebody to
+                check values in a file that may not exist — which is
+                its own answer, and the commonest one: .env is not in
+                git, so a fresh clone has none and the application
+                falls back to built-in defaults that connect as the
+                wrong user with no password at all.
+
+                The password is shown as a length. Printing it would
+                put a live credential in a terminal, a screenshot and
+                a support thread, and the only question anybody needs
+                answered here is whether it arrived.                */
+            $envFile = BASE_PATH . '/.env';
+            fwrite(STDERR,
+                  "\n          .env       " . $envFile . "\n"
+                . "                     " . (is_file($envFile)
+                        ? 'found'
+                        : 'NOT FOUND — built-in defaults are in use, which is '
+                          . 'almost certainly this failure') . "\n"
+                . "          tried      " . DB_USER . '@' . DB_HOST . ':' . DB_PORT
+                        . '/' . DB_NAME . ', password '
+                        . (DB_PASS === '' ? 'empty' : strlen((string) DB_PASS) . ' chars')
+                        . "\n");
+
             if ($answered) {
                 fwrite(STDERR,
                       "\n          The server is up and refused this on purpose, so waiting\n"
