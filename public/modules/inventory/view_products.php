@@ -651,20 +651,25 @@ $baseQuery = array_filter([
                   250" and "Amoxil 500" as two different things, and
                   a row that records only "Amoxil" cannot tell them
                   apart when somebody is counting stock. */ ?>
+        <?php /*  Headings, because this form asks for thirty things and
+                  without them it is thirty things in a column. They carry
+                  data-goods-only alongside the fields they head, so a
+                  service does not get a "The medicine" rule with nothing
+                  underneath it.                                        */ ?>
+        <div class="form-divider" data-goods-only>The medicine</div>
+
         <div class="form-grid-3" data-goods-only>
             <div class="form-group">
                 <label class="form-label">Generic name</label>
                 <input type="text" name="generic_name" class="form-control" maxlength="160"
                        placeholder="Paracetamol">
-                <span class="form-hint">What it actually is. Somebody asking for Panadol
-                    and somebody asking for Hedex want the same thing.</span>
+                <span class="form-hint">Panadol and Hedex are both paracetamol.</span>
             </div>
             <div class="form-group">
                 <label class="form-label">Strength</label>
                 <input type="text" name="strength" class="form-control" maxlength="60"
                        placeholder="500 mg">
-                <span class="form-hint">As it is written on the pack &mdash; 500 mg,
-                    5 mg/ml, 500 mg/125 mg.</span>
+                <span class="form-hint">As written on the pack.</span>
             </div>
             <div class="form-group">
                 <label class="form-label">Form</label>
@@ -695,8 +700,7 @@ $baseQuery = array_filter([
                         <option value="<?= e($k) ?>"><?= e($label) ?></option>
                     <?php endforeach; ?>
                 </select>
-                <span class="form-hint">Cold-chain stock that spent a night out of the
-                    fridge is waste, and nobody can tell by looking.</span>
+                <span class="form-hint">Cold chain left out overnight is waste.</span>
             </div>
             <div class="form-group">
                 <label class="form-label">PPB registration no.</label>
@@ -705,14 +709,21 @@ $baseQuery = array_filter([
             </div>
         </div>
 
+        <div class="form-divider" data-goods-only>Dispensing rules</div>
+
         <div class="form-grid-2" data-goods-only>
             <div class="form-group">
+                <?php /*  A label line of its own. Without it the checkbox
+                          starts at the top of its cell while the select
+                          next door starts below its label, and the two
+                          sit a line apart for no reason a reader can
+                          see.                                          */ ?>
+                <label class="form-label">Prescription</label>
                 <label class="checkbox">
                     <input type="checkbox" name="requires_rx">
                     <span>Prescription only</span>
                 </label>
-                <span class="form-hint">The counter will not sell this without a
-                    prescription on the sale.</span>
+                <span class="form-hint">Refused at the counter without a prescriber.</span>
             </div>
             <div class="form-group">
                 <label class="form-label">Controlled class</label>
@@ -722,10 +733,11 @@ $baseQuery = array_filter([
                         <option value="<?= e($k) ?>"><?= e($label) ?></option>
                     <?php endforeach; ?>
                 </select>
-                <span class="form-hint">Narcotics and psychotropics go in the controlled
-                    register, which is a legal obligation rather than a preference.</span>
+                <span class="form-hint">Narcotics and psychotropics enter the controlled register.</span>
             </div>
         </div>
+
+        <div class="form-divider">Codes and classification</div>
 
         <div class="form-grid-3">
             <div class="form-group">
@@ -781,6 +793,8 @@ $baseQuery = array_filter([
             </div>
         </div>
 
+        <div class="form-divider">Description and images</div>
+
         <div class="form-group">
             <label class="form-label">Description <span class="opt">(full product detail)</span></label>
             <textarea name="description" class="form-control" rows="3"></textarea>
@@ -791,6 +805,8 @@ $baseQuery = array_filter([
             <input type="file" name="images[]" class="form-control" accept="image/jpeg,image/png,image/webp,image/gif" multiple>
             <div class="field-note" data-image-note hidden></div>
         </div>
+
+        <div class="form-divider">Price and stock</div>
 
         <div class="form-grid-3">
             <div class="form-group">
