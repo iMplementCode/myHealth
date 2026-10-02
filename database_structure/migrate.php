@@ -105,6 +105,22 @@ $pdo       = null;
  *  These four messages mean the server is up, listening and
  *  refusing on purpose. Waiting cannot change any of them.
  *
+ *  Two shapes, which is what this missed on the first attempt. A
+ *  wrong password is refused by the server and arrives as "FATAL:
+ *  password authentication failed". No password at all never
+ *  reaches the server: libpq refuses to send one and returns
+ *  "fe_sendauth: no password supplied". Only the first matched, so
+ *  an empty DB_PASS — the commoner mistake of the two — still sat
+ *  through the full twenty seconds.
+ *
+ *  It stays a list of final errors rather than a list of retryable
+ *  ones on purpose. Inverting it would fail fast on anything
+ *  unrecognised, which reads better right up to the deploy where
+ *  some error nobody listed is transient: migrations get skipped,
+ *  `|| true` in the start command swallows it, and the site serves
+ *  yesterday's schema without complaint. An unknown error keeps
+ *  waiting, which costs twenty seconds and never a schema.
+ *
  *  The one case this gets wrong is an orchestration that creates
  *  the database after starting the application. Nothing here does
  *  that — a tenant's database is created by deploy/new-tenant.php
@@ -113,8 +129,10 @@ $pdo       = null;
  *  what was refused.                                              */
 $finalRefusal = static function (string $message): bool {
     foreach ([
-        'does not exist',        // database "x" / role "x"
-        'authentication failed',
+        'does not exist',          // database "x" / role "x"
+        'authentication failed',   // FATAL, from the server
+        'fe_sendauth',             // refused by libpq before it sent anything
+        'no password supplied',    // the same, named in full
         'no pg_hba.conf entry',
         'is not permitted to log in',
     ] as $phrase) {
@@ -142,6 +160,9 @@ while (true) {
                     . "          in .env against what the server actually has:\n\n"
                     . "              psql -l          the databases that exist\n"
                     . "              \\du              the roles that exist\n\n"
+                    . "          \"no password supplied\" means DB_PASS is empty while the\n"
+                    . "          server wants one. Give the role a password and put it in\n"
+                    . "          .env:  ALTER ROLE <user> WITH PASSWORD '<secret>';\n\n"
                     . "          PostgreSQL folds an unquoted name to lower case when it is\n"
                     . "          created, and uses the name in a connection string exactly as\n"
                     . "          written — so a database created as myhealth is not myHealth.\n");
