@@ -349,66 +349,127 @@ function trial_balance(string $from, string $to): array
     ];
 }
 
-/** What an account held before the period opened. */
+/**
+ * What an account held before the period opened.
+ *
+ * The date filter is a WHERE over an inner join, and that is the
+ * whole point of this function rather than a detail of it. It was
+ * written as
+ *
+ *     LEFT JOIN journal_entries je
+ *            ON je.entry_id = jl.entry_id AND je.entry_date < :from
+ *
+ * which reads as a filter and is not one: a condition in a LEFT
+ * JOIN's ON clause does not remove rows, it only leaves the right
+ * side NULL. Every line the account had ever carried stayed in
+ * the SUM, so the opening balance was the all-time total — on
+ * every ledger, in every period, silently, because with a few
+ * entries in one month it looks plausible.
+ *
+ * A load test is what found it: ten thousand entries made the
+ * opening balance twenty-five million against a first movement of
+ * four thousand, which is not a number anybody can misread.
+ */
 function account_opening_balance(int $accountId, string $from): float
 {
-    $row = db_one(
-        'SELECT a.type,
-                COALESCE(SUM(jl.debit), 0)  AS debits,
-                COALESCE(SUM(jl.credit), 0) AS credits
-           FROM accounts a
-      LEFT JOIN journal_lines   jl ON jl.account_id = a.account_id
-      LEFT JOIN journal_entries je ON je.entry_id = jl.entry_id AND je.entry_date < :from
-          WHERE a.account_id = :id
-          GROUP BY a.type',
-        [':id' => $accountId, ':from' => $from]
-    );
-    if (!$row) {
+    $type = db_value('SELECT type FROM accounts WHERE account_id = :id', [':id' => $accountId]);
+    if ($type === null || $type === false) {
         return 0.0;
     }
-    return account_is_debit_normal((string) $row['type'])
-        ? (float) $row['debits'] - (float) $row['credits']
-        : (float) $row['credits'] - (float) $row['debits'];
-}
 
-/** One account's movements, with a running balance. */
-function account_ledger(int $accountId, string $from, string $to): array
-{
-    $account = db_one('SELECT * FROM accounts WHERE account_id = :id', [':id' => $accountId]);
-    if (!$account) {
-        return ['account' => null, 'rows' => [], 'opening' => 0.0, 'closing' => 0.0];
-    }
-
-    $rows = db_all(
-        'SELECT je.entry_id, je.entry_number, je.entry_date, je.memo AS entry_memo,
-                je.source_table, je.source_id,
-                jl.debit, jl.credit, jl.memo AS line_memo
+    $row = db_one(
+        'SELECT COALESCE(SUM(jl.debit), 0)  AS debits,
+                COALESCE(SUM(jl.credit), 0) AS credits
            FROM journal_lines jl
            JOIN journal_entries je ON je.entry_id = jl.entry_id
           WHERE jl.account_id = :id
-            AND je.entry_date BETWEEN :from AND :to
-          ORDER BY je.entry_date, je.entry_id, jl.line_no',
+            AND je.entry_date < :from',
+        [':id' => $accountId, ':from' => $from]
+    );
+
+    $debits  = (float) ($row['debits']  ?? 0);
+    $credits = (float) ($row['credits'] ?? 0);
+
+    return account_is_debit_normal((string) $type) ? $debits - $credits : $credits - $debits;
+}
+
+/**
+ * One account's movements, with a running balance, one page at
+ * a time.
+ *
+ * Paginated because it was not, and a load test said so: ten
+ * thousand entries against Cash in hand rendered a seven
+ * megabyte page. A pharmacy taking a hundred payments a day puts
+ * thirty-six thousand lines a year through that one account, so
+ * the page was going to reach twenty-five megabytes inside a
+ * year of ordinary trading and then keep going.
+ *
+ * The running balance is computed by Postgres over the whole
+ * period and only then cut to a page, because a balance carried
+ * down has to count every row before it — doing the sum in PHP
+ * would mean fetching everything again, which is the thing being
+ * fixed.
+ */
+function account_ledger(int $accountId, string $from, string $to, int $perPage = 50, int $offset = 0): array
+{
+    $account = db_one('SELECT * FROM accounts WHERE account_id = :id', [':id' => $accountId]);
+    if (!$account) {
+        return ['account' => null, 'rows' => [], 'opening' => 0.0, 'closing' => 0.0, 'total' => 0];
+    }
+
+    $debitNormal = account_is_debit_normal((string) $account['type']);
+    $movement    = $debitNormal ? '(jl.debit - jl.credit)' : '(jl.credit - jl.debit)';
+    $opening     = account_opening_balance($accountId, $from);
+
+    $total = (int) db_value(
+        'SELECT COUNT(*)
+           FROM journal_lines jl
+           JOIN journal_entries je ON je.entry_id = jl.entry_id
+          WHERE jl.account_id = :id AND je.entry_date BETWEEN :from AND :to',
         [':id' => $accountId, ':from' => $from, ':to' => $to]
     );
 
-    $debitNormal = account_is_debit_normal((string) $account['type']);
-    $balance     = account_opening_balance($accountId, $from);
-    $opening     = $balance;
+    $rows = db_all(
+        'SELECT * FROM (
+             SELECT je.entry_id, je.entry_number, je.entry_date, je.memo AS entry_memo,
+                    je.source_table, je.source_id,
+                    jl.debit, jl.credit, jl.memo AS line_memo,
+                    SUM(' . $movement . ') OVER (
+                        ORDER BY je.entry_date, je.entry_id, jl.line_no, jl.line_id
+                        ROWS UNBOUNDED PRECEDING
+                    ) AS running
+               FROM journal_lines jl
+               JOIN journal_entries je ON je.entry_id = jl.entry_id
+              WHERE jl.account_id = :id
+                AND je.entry_date BETWEEN :from AND :to
+         ) t
+         ORDER BY t.entry_date, t.entry_id
+         LIMIT ' . (int) $perPage . ' OFFSET ' . (int) $offset,
+        [':id' => $accountId, ':from' => $from, ':to' => $to]
+    );
 
     foreach ($rows as &$row) {
-        $movement = $debitNormal
-            ? (float) $row['debit'] - (float) $row['credit']
-            : (float) $row['credit'] - (float) $row['debit'];
-        $balance += $movement;
-        $row['balance'] = $balance;
+        $row['balance'] = $opening + (float) $row['running'];
     }
     unset($row);
+
+    //  The closing balance is the whole period's, not the page's:
+    //  somebody looking at page one still needs to know where the
+    //  account ends up.
+    $closing = $opening + (float) db_value(
+        'SELECT COALESCE(SUM(' . $movement . '), 0)
+           FROM journal_lines jl
+           JOIN journal_entries je ON je.entry_id = jl.entry_id
+          WHERE jl.account_id = :id AND je.entry_date BETWEEN :from AND :to',
+        [':id' => $accountId, ':from' => $from, ':to' => $to]
+    );
 
     return [
         'account' => $account,
         'rows'    => $rows,
         'opening' => $opening,
-        'closing' => $balance,
+        'closing' => $closing,
+        'total'   => $total,
     ];
 }
 

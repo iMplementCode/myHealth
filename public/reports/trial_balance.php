@@ -34,7 +34,11 @@ $accountId = input_int($_GET, 'account_id');
 
 /* ═══ One account's ledger ══════════════════════════════════ */
 if ($accountId) {
-    $ledger  = account_ledger($accountId, $from, $to);
+    //  Sized before it is fetched: this page used to render every
+    //  line the account had ever carried.
+    $probe   = account_ledger($accountId, $from, $to, 1, 0);
+    $pg      = paginate((int) $probe['total'], PER_PAGE_DEFAULT);
+    $ledger  = account_ledger($accountId, $from, $to, $pg['per_page'], $pg['offset']);
     $account = $ledger['account'];
 
     if (!$account) {
@@ -89,7 +93,12 @@ if ($accountId) {
                 </thead>
                 <tbody>
                     <tr>
-                        <td colspan="5"><em>Balance brought forward</em></td>
+                        <td colspan="5">
+                            <em>Balance brought forward</em>
+                            <?php if ($pg['offset'] > 0): ?>
+                                <span class="hint">&mdash; at the start of this period</span>
+                            <?php endif; ?>
+                        </td>
                         <td class="ta-right"><strong><?= e(money($ledger['opening'])) ?></strong></td>
                     </tr>
                     <?php if (!$ledger['rows']): ?>
@@ -123,6 +132,7 @@ if ($accountId) {
                 </tfoot>
             </table>
         </div>
+        <?php pagination_nav($pg, ['account_id' => $accountId, 'from' => $from, 'to' => $to], 'movement'); ?>
     </div>
 
     <?php

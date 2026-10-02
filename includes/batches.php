@@ -107,12 +107,20 @@ function batch_state_counts(): array
 }
 
 /**
- * The batch list, filtered.
+ * How many batches match a filter.
  *
- * $filters: state, q (drug name, generic or batch number),
- *           product_id (the notifications link in with this).
+ * Split out so a page can size its pagination without fetching a
+ * throwaway row first, which is what the batches screen was
+ * doing: two COUNTs and two SELECTs to show ten rows.
  */
-function batch_list(array $filters, int $perPage, int $offset): array
+function batch_count(array $filters): int
+{
+    [$sql, $params] = batch_filter_sql($filters);
+    return (int) db_value('SELECT COUNT(*)' . $sql, $params);
+}
+
+/** The FROM and WHERE both the count and the fetch use. */
+function batch_filter_sql(array $filters): array
 {
     $where  = [];
     $params = [];
@@ -143,7 +151,18 @@ function batch_list(array $filters, int $perPage, int $offset): array
         LEFT JOIN suppliers s ON s.supplier_id = pb.supplier_id'
         . ($where ? ' WHERE ' . implode(' AND ', $where) : '');
 
-    $total = (int) db_value('SELECT COUNT(*)' . $sql, $params);
+    return [$sql, $params];
+}
+
+/**
+ * The batch list, filtered.
+ *
+ * $filters: state, q (drug name, generic or batch number),
+ *           product_id (the notifications link in with this).
+ */
+function batch_list(array $filters, int $perPage, int $offset): array
+{
+    [$sql, $params] = batch_filter_sql($filters);
 
     $rows = db_all(
         'SELECT pb.batch_id, pb.batch_number, pb.expiry_date, pb.quantity_received,
@@ -166,7 +185,7 @@ function batch_list(array $filters, int $perPage, int $offset): array
         $params
     );
 
-    return ['rows' => $rows, 'total' => $total];
+    return ['rows' => $rows];
 }
 
 /** One batch, with enough of its drug to name it properly. */

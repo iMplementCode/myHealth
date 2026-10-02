@@ -352,10 +352,11 @@ $productId = input_int($_GET, 'product_id');
 $counts  = batch_state_counts();
 $filters = ['state' => $state, 'q' => $search, 'product_id' => $productId];
 
-//  Count the filtered set first, then size the page from it, so
-//  the navigation counts what is actually on screen.
-$probe   = batch_list($filters, 1, 0);
-$pg      = paginate($probe['total'], PER_PAGE_DEFAULT);
+/*  Counted once, then fetched once. The first version called
+    batch_list() twice — a probe to learn the total and then the
+    real fetch — which ran the COUNT and the SELECT two times
+    each for one page of results.                              */
+$pg      = paginate(batch_count($filters), PER_PAGE_DEFAULT);
 $batches = batch_list($filters, $pg['per_page'], $pg['offset'])['rows'];
 
 $product = $productId
