@@ -63,6 +63,21 @@ Options -Indexes
     RewriteEngine On
     RewriteCond %{HTTPS} !=on
     RewriteCond %{HTTP:X-Forwarded-Proto} !=https
+
+    # Not on a development machine. A redirect to https://localhost
+    # reaches XAMPP's self-signed certificate at best and nothing at
+    # all at worst, and because it is a 301 the browser remembers it
+    # — so the developer who hits this once keeps hitting it after
+    # the cause is gone. HTTP_HOST carries the port when there is
+    # one, hence the optional group.
+    #
+    # .local and .test are reserved for exactly this, so a vhost
+    # called myhealth.local is covered without listing it here.
+    # Nothing routable matches either pattern, so a deployed site
+    # still redirects.
+    RewriteCond %{HTTP_HOST} !^(localhost|127\.0\.0\.1|\[::1\])(:[0-9]+)?$ [NC]
+    RewriteCond %{HTTP_HOST} !\.(local|test)(:[0-9]+)?$ [NC]
+
     RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
 </IfModule>
 

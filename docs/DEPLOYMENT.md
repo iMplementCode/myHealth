@@ -270,6 +270,13 @@ The URL is the one thing that changes. With the project at
 `/implement_er/` answering **403 Forbidden** is the deny-all
 doing its job, not a fault. Add `/public/`.
 
+The HTTPS redirect in `public/.htaccess` does not fire on
+`localhost`, `127.0.0.1`, or a host ending `.local` or `.test`, so
+plain HTTP works on a development machine without weakening
+anything deployed. Every other host still redirects — including
+one like `localhost.evil.com`, which is why the pattern is
+anchored rather than a substring match.
+
 Better, and closer to production, is to give it a virtual host so
 the document root is `public/` and the URL has nothing extra in
 it. In `C:\xampp\apache\conf\extra\httpd-vhosts.conf`:

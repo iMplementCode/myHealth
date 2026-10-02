@@ -92,14 +92,62 @@ if ($cliDb) {
 $waitUntil = time() + max(0, (int) env('MIGRATE_DB_WAIT', '20'));
 $pdo       = null;
 
+/*  Did nobody answer, or did somebody answer and say no?
+ *
+ *  Both arrive as SQLSTATE[08006], so the retry above cannot tell
+ *  them apart and waits the full budget either way. For a database
+ *  that is still starting up that is the whole point. For a name
+ *  that is wrong it is twenty seconds spent proving that a wrong
+ *  name stays wrong, and — worse — the sentence that says what is
+ *  actually wrong scrolls past ten "not answering yet" lines and
+ *  reads like the symptom of a server that is down.
+ *
+ *  These four messages mean the server is up, listening and
+ *  refusing on purpose. Waiting cannot change any of them.
+ *
+ *  The one case this gets wrong is an orchestration that creates
+ *  the database after starting the application. Nothing here does
+ *  that — a tenant's database is created by deploy/new-tenant.php
+ *  before any deploy reaches it — and somebody who does arrange it
+ *  that way can set MIGRATE_DB_WAIT and will still be told exactly
+ *  what was refused.                                              */
+$finalRefusal = static function (string $message): bool {
+    foreach ([
+        'does not exist',        // database "x" / role "x"
+        'authentication failed',
+        'no pg_hba.conf entry',
+        'is not permitted to log in',
+    ] as $phrase) {
+        if (stripos($message, $phrase) !== false) {
+            return true;
+        }
+    }
+    return false;
+};
+
 while (true) {
     try {
         $pdo = Database::connect();
         break;
     } catch (PDOException $e) {
-        if (time() >= $waitUntil) {
-            fwrite(STDERR, "\n  ✗ FAIL  the database is not reachable: " . $e->getMessage() . "\n"
-                         . "          No migrations applied. The web server still starts;\n"
+        $answered = $finalRefusal($e->getMessage());
+
+        if ($answered || time() >= $waitUntil) {
+            fwrite(STDERR, "\n  ✗ FAIL  " . $e->getMessage() . "\n");
+
+            if ($answered) {
+                fwrite(STDERR,
+                      "\n          The server is up and refused this on purpose, so waiting\n"
+                    . "          would not have helped. Check DB_NAME, DB_USER and DB_PASS\n"
+                    . "          in .env against what the server actually has:\n\n"
+                    . "              psql -l          the databases that exist\n"
+                    . "              \\du              the roles that exist\n\n"
+                    . "          PostgreSQL folds an unquoted name to lower case when it is\n"
+                    . "          created, and uses the name in a connection string exactly as\n"
+                    . "          written — so a database created as myhealth is not myHealth.\n");
+            }
+
+            fwrite(STDERR, "\n          No migrations applied. The web server still starts;\n"
                          . "          it will serve once the database comes back.\n");
             exit(1);
         }
