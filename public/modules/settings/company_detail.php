@@ -274,221 +274,193 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 $pdo = null;
 ?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Company Settings — Run AI Technologies</title>
-    <link href="https://fonts.googleapis.com/css2?family=Cabinet+Grotesk:wght@400;500;700;800&family=Sentient:wght@400;700&display=swap" rel="stylesheet">
-    <style>
-        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-        :root {
-            --bg: #0a0b10; --panel: #111218; --panel2: #16181f; --border: #252830;
-            --ink: #eceef5; --ink-soft: #7a7f94; --gold: #f0b429; --gold-dim: rgba(240,180,41,0.1);
-            --red: #ef4444; --green: #10b981; --radius: 12px;
-        }
-        
-        body { font-family: 'Cabinet Grotesk', sans-serif; background: var(--bg); color: var(--ink); display: flex; justify-content: center; padding: 40px 20px; min-height: 100vh; }
-        
-        .container { width: 100%; max-width: 680px; }
-        
-        .page-header { margin-bottom: 24px; text-align: center; }
-        .page-header h1 { font-family: 'Sentient', serif; font-size: 32px; font-weight: 700; color: var(--gold); margin-bottom: 8px; }
-        .page-header p { font-size: 15px; color: var(--ink-soft); font-weight: 400; }
+<?php
+/*  Until now this page built its own HTML document: its own
+    <head>, its own sixty-line <style> block restating the design
+    tokens, its own web fonts, its own class names, and a <title>
+    naming a different company. Clicking Company Details therefore
+    took the whole application away — no sidebar, no top bar, no
+    breadcrumbs, nothing to get back with — which is why it felt
+    like a new window had opened over the one somebody was working
+    in.
 
-        .flash { background: rgba(16,185,129,0.1); color: var(--green); border: 1px solid var(--green); padding: 14px 18px; border-radius: var(--radius); margin-bottom: 24px; font-size: 14.5px; }
-        .flash.error { background: rgba(239,68,68,0.1); color: var(--red); border-color: var(--red); }
+    It now uses the same layout as every other page. The styling
+    that was duplicated here comes from style.css and forms.css,
+    so this screen follows the light and dark theme like the rest
+    instead of being permanently dark.                           */
 
-        .card { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 32px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
-        
-        .form-section { margin-bottom: 24px; }
-        .section-title { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--gold); border-bottom: 1px solid var(--border); padding-bottom: 8px; margin-bottom: 20px; }
-        
-        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-        
-        .form-group { margin-bottom: 20px; }
-        .form-label { display: block; font-size: 13px; font-weight: 700; color: var(--ink-soft); margin-bottom: 8px; }
-        .form-label .req { color: var(--gold); }
-        
-        .form-control { width: 100%; background: var(--panel2); border: 1px solid var(--border); border-radius: 8px; color: var(--ink); padding: 12px 14px; font-family: inherit; font-size: 15px; outline: none; transition: 0.2s; }
-        .form-control:focus { border-color: var(--gold); background: var(--panel); box-shadow: 0 0 0 3px var(--gold-dim); }
-        textarea.form-control { resize: vertical; min-height: 80px; }
+$pageTitle   = 'Company Settings';
+//  finance.css as well as forms.css: .u-pad and .u-nomargin are
+//  defined there, and this page uses both. Loading only forms.css
+//  left every field flush against the panel border.
+$pageStyles  = ['forms.css', 'finance.css'];
+$pageScripts = ['legacy.js'];
+$breadcrumbs = [['label' => 'Settings'], ['label' => 'Company Details']];
 
-        /* Logo Upload Styles */
-        .logo-preview-area { display: flex; align-items: center; gap: 24px; background: var(--panel2); border: 1px dashed var(--border); border-radius: 8px; padding: 20px; }
-        .current-logo { width: 80px; height: 80px; border-radius: 8px; background: var(--panel); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; overflow: hidden; }
-        .current-logo img { max-width: 100%; max-height: 100%; object-fit: contain; }
-        .current-logo .no-logo { font-size: 11px; color: var(--ink-soft); text-transform: uppercase; font-weight: 700; }
-        
-        .upload-btn-wrapper { position: relative; overflow: hidden; display: inline-block; }
-        .btn-upload { border: 1px solid var(--gold); color: var(--gold); background: transparent; padding: 8px 16px; border-radius: 6px; font-weight: 700; font-family: inherit; cursor: pointer; transition: 0.2s; }
-        .btn-upload:hover { background: var(--gold-dim); }
-        .upload-btn-wrapper input[type=file] { font-size: 100px; position: absolute; left: 0; top: 0; opacity: 0; cursor: pointer; }
-        .upload-hint { display: block; font-size: 12px; color: var(--ink-soft); margin-top: 8px; font-weight: 400; }
+require __DIR__ . '/../../../includes/header.php';
+?>
 
-        .btn-submit { width: 100%; background: var(--gold); color: #0a0b10; border: none; padding: 16px; font-family: inherit; font-weight: 800; font-size: 16px; border-radius: 8px; cursor: pointer; margin-top: 10px; transition: 0.2s; }
-        .btn-submit:hover { opacity: 0.9; transform: translateY(-1px); }
+<?php if ($flash): ?>
+    <div class="alert alert--<?= $flash['success'] ? 'success' : 'error' ?>" role="status">
+        <?php /*  Escaped, like every other flash in the application.
+                  These messages are not all written by us: a save that
+                  trips a database rule comes back through
+                  db_rule_message(), and a PostgreSQL error text can
+                  quote the value that caused it — which is a value
+                  somebody typed.                                   */ ?>
+        <span><?= e($flash['message']) ?></span>
+    </div>
+<?php endif; ?>
 
-        @media (max-width: 600px) {
-            .grid-2 { grid-template-columns: 1fr; gap: 0; }
-        }
-    </style>
-</head>
-<body>
+<form method="POST" action="" enctype="multipart/form-data">
+    <?= csrf_field() ?>
 
-<div class="container">
-    <div class="page-header">
-        <h1>Company Profile</h1>
-        <p>Manage the branding and contact details used on official documents.</p>
+    <div class="panel">
+        <div class="panel-head">
+            <h2 class="panel-title">Branding</h2>
+        </div>
+        <div class="u-pad">
+            <div class="form-grid-2">
+                <div class="form-group">
+                    <div class="form-label">Current logo</div>
+                    <?php if (!empty($currentSettings['logo_path'])): ?>
+                        <img src="<?= e(company_logo_url() ?? '') ?>" alt="Company logo"
+                             style="max-height:72px;max-width:100%;">
+                    <?php else: ?>
+                        <p class="hint u-nomargin">No logo uploaded yet.</p>
+                    <?php endif; ?>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="logo">Replace it</label>
+                    <input type="file" id="logo" name="logo" class="form-control"
+                           accept="image/jpeg, image/png, image/webp" data-logo-input>
+                    <span class="hint" id="fileNameHint">
+                        Prints on invoices and receipts. Max 2MB &mdash; JPG, PNG or WebP.
+                    </span>
+                </div>
+            </div>
+        </div>
     </div>
 
-    <?php if ($flash): ?>
-        <?php /* Escaped, like every other flash in the application.
-                 These messages are not all written by us: a save that
-                 trips a database rule comes back through
-                 db_rule_message(), and a PostgreSQL error text can
-                 quote the value that caused it — which is a value
-                 somebody typed. */ ?>
-        <div class="flash <?= $flash['success'] ? 'success' : 'error' ?>">
-            <?= e($flash['message']) ?>
+    <div class="panel">
+        <div class="panel-head">
+            <h2 class="panel-title">Core details</h2>
         </div>
-    <?php endif; ?>
+        <div class="u-pad">
+            <div class="form-group">
+                <label class="form-label" for="company_name">
+                    Company name <span class="req">*</span>
+                </label>
+                <?php /*  No default. This used to pre-fill the parent
+                          company's name, address and telephone number,
+                          so a new pharmacy opened its settings and
+                          found somebody else's business already typed
+                          in — and printed it on an invoice if nobody
+                          looked.                                    */ ?>
+                <input type="text" id="company_name" name="company_name" class="form-control"
+                       value="<?= e($currentSettings['company_name'] ?? '') ?>" required>
+            </div>
 
-    <div class="card">
-        <form method="POST" action="" enctype="multipart/form-data">
-            <?= csrf_field() ?>
-            
-            <div class="form-section">
-                <div class="section-title">Branding</div>
+            <div class="form-grid-2">
                 <div class="form-group">
-                    <label class="form-label">Company Logo (For PDFs & Invoices)</label>
-                    <div class="logo-preview-area">
-                        <div class="current-logo">
-                            <?php if (!empty($currentSettings['logo_path'])): ?>
-                                <img src="<?= htmlspecialchars(company_logo_url() ?? '') ?>" alt="Logo">
-                            <?php else: ?>
-                                <span class="no-logo">No Logo</span>
-                            <?php endif; ?>
-                        </div>
-                        <div>
-                            <div class="upload-btn-wrapper">
-                                <button type="button" class="btn-upload">Choose New Logo</button>
-                                <input type="file" name="logo" accept="image/jpeg, image/png, image/webp" data-logo-input>
-                            </div>
-                            <span class="upload-hint" id="fileNameHint">Max 2MB. JPG, PNG, WebP allowed.</span>
-                        </div>
-                    </div>
+                    <label class="form-label" for="email">Email address</label>
+                    <input type="email" id="email" name="email" class="form-control"
+                           value="<?= e($currentSettings['email'] ?? '') ?>">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="mobile">Mobile number</label>
+                    <input type="tel" id="mobile" name="mobile" class="form-control"
+                           value="<?= e($currentSettings['mobile'] ?? '') ?>">
                 </div>
             </div>
 
-            <div class="form-section">
-                <div class="section-title">Core Details</div>
-                
+            <?php if (column_exists('company_settings', 'extra_emails')): ?>
                 <div class="form-group">
-                    <label class="form-label">Company Name <span class="req">*</span></label>
-                    <input type="text" name="company_name" class="form-control" 
-                           value="<?= htmlspecialchars($currentSettings['company_name'] ?? 'Run AI Technologies') ?>" required>
-                </div>
-
-                <div class="grid-2">
-                    <div class="form-group">
-                        <label class="form-label">Email Address</label>
-                        <input type="email" name="email" class="form-control" 
-                               value="<?= htmlspecialchars($currentSettings['email'] ?? 'info@runaitechnologies.com') ?>">
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Mobile Number</label>
-                        <input type="tel" name="mobile" class="form-control" 
-                               value="<?= htmlspecialchars($currentSettings['mobile'] ?? '+254 706 576244') ?>">
-                    </div>
-                </div>
-
-                <?php if (column_exists('company_settings', 'extra_emails')): ?>
-                <div class="form-group">
-                    <label class="form-label">Other Email Addresses</label>
-                    <textarea name="extra_emails" class="form-control" rows="3"
-                              placeholder="accounts@example.co.ke&#10;support@example.co.ke"><?= htmlspecialchars($currentSettings['extra_emails'] ?? '') ?></textarea>
-                    <span class="upload-hint">
-                        One per line. They print on every document after the main
-                        address above, in this order. Anything that is not an email
-                        address is dropped rather than printed.
+                    <label class="form-label" for="extra_emails">Other email addresses</label>
+                    <textarea id="extra_emails" name="extra_emails" class="form-control" rows="3"
+                              placeholder="accounts@example.co.ke&#10;support@example.co.ke"><?= e($currentSettings['extra_emails'] ?? '') ?></textarea>
+                    <span class="hint">
+                        One per line, printed after the main address in this order.
+                        Anything that is not an email address is dropped rather than printed.
                     </span>
                 </div>
-                <?php endif; // A box that silently discards what is typed
-                              // into it is worse than no box. ?>
+            <?php endif; // A box that silently discards what is typed
+                         // into it is worse than no box. ?>
 
-                <div class="form-group">
-                    <label class="form-label">Website URL</label>
-                    <input type="text" name="website" class="form-control" 
-                           value="<?= htmlspecialchars($currentSettings['website'] ?? 'www.runaitechnologies.com') ?>">
-                </div>
-
-                <div class="form-group">
-                    <label class="form-label">Physical Address / Location</label>
-                    <textarea name="location" class="form-control" rows="3"><?= htmlspecialchars($currentSettings['location'] ?? "Gaberone Road, Montana Mall 2nd Floor\nShop Number M206") ?></textarea>
-                </div>
-
-                <?php if (column_exists('company_settings', 'tax_pin')): ?>
-                <div class="form-group">
-                    <label class="form-label">KRA PIN</label>
-                    <input type="text" name="tax_pin" class="form-control" placeholder="P051234567X"
-                           value="<?= htmlspecialchars($currentSettings['tax_pin'] ?? '') ?>">
-                    <span class="upload-hint">
-                        Prints under the company details on every document. A tax
-                        invoice needs it.
-                    </span>
-                </div>
-                <?php endif; ?>
+            <div class="form-group">
+                <label class="form-label" for="website">Website</label>
+                <input type="text" id="website" name="website" class="form-control"
+                       value="<?= e($currentSettings['website'] ?? '') ?>">
             </div>
 
-            <?php if (column_exists('company_settings', 'mpesa_paybill')): ?>
-            <div class="form-section">
-                <div class="section-title">How Customers Pay You</div>
-                <p class="upload-hint" style="margin-bottom:14px;">
-                    Printed on invoices, proformas and quotes — the documents that
-                    ask for money. An invoice that does not say where to send it
-                    gets answered with a phone call, and the paybill arrives by
-                    WhatsApp with a digit missing.
+            <div class="form-group">
+                <label class="form-label" for="location">Physical address</label>
+                <textarea id="location" name="location" class="form-control" rows="3"><?= e($currentSettings['location'] ?? '') ?></textarea>
+            </div>
+
+            <?php if (column_exists('company_settings', 'tax_pin')): ?>
+                <div class="form-group">
+                    <label class="form-label" for="tax_pin">KRA PIN</label>
+                    <input type="text" id="tax_pin" name="tax_pin" class="form-control"
+                           placeholder="P051234567X"
+                           value="<?= e($currentSettings['tax_pin'] ?? '') ?>">
+                    <span class="hint">
+                        Prints under the company details on every document. A tax invoice needs it.
+                    </span>
+                </div>
+            <?php endif; ?>
+        </div>
+    </div>
+
+    <?php if (column_exists('company_settings', 'mpesa_paybill')): ?>
+        <div class="panel">
+            <div class="panel-head">
+                <h2 class="panel-title">How customers pay you</h2>
+            </div>
+            <div class="u-pad">
+                <p class="hint">
+                    Printed on invoices, proformas and quotes &mdash; the documents that ask
+                    for money. An invoice that does not say where to send it gets answered
+                    with a phone call, and the paybill arrives by WhatsApp with a digit missing.
                 </p>
 
-                <div class="grid-2">
+                <div class="form-grid-2">
                     <div class="form-group">
-                        <label class="form-label">M-Pesa Paybill / Till</label>
-                        <input type="text" name="mpesa_paybill" class="form-control"
+                        <label class="form-label" for="mpesa_paybill">M-Pesa paybill or till</label>
+                        <input type="text" id="mpesa_paybill" name="mpesa_paybill" class="form-control"
                                inputmode="numeric" placeholder="400200"
-                               value="<?= htmlspecialchars($currentSettings['mpesa_paybill'] ?? '') ?>">
-                        <span class="upload-hint">Digits only. Spaces are stripped.</span>
+                               value="<?= e($currentSettings['mpesa_paybill'] ?? '') ?>">
+                        <span class="hint">Digits only. Spaces are stripped.</span>
                     </div>
                     <div class="form-group">
-                        <label class="form-label">Account Number</label>
-                        <input type="text" name="mpesa_account" class="form-control"
+                        <label class="form-label" for="mpesa_account">Account number</label>
+                        <input type="text" id="mpesa_account" name="mpesa_account" class="form-control"
                                placeholder="Your account, or leave blank"
-                               value="<?= htmlspecialchars($currentSettings['mpesa_account'] ?? '') ?>">
-                        <span class="upload-hint">
-                            Leave this empty if customers should quote the invoice
-                            number instead — the document then says so.
+                               value="<?= e($currentSettings['mpesa_account'] ?? '') ?>">
+                        <span class="hint">
+                            Leave empty if customers should quote the invoice number instead
+                            &mdash; the document then says so.
                         </span>
                     </div>
                 </div>
 
                 <div class="form-group">
-                    <label class="form-label">Bank Details</label>
-                    <textarea name="bank_details" class="form-control" rows="4"
-                              placeholder="Equity Bank, Westlands Branch&#10;Run AI Technologies Ltd&#10;0123456789"><?= htmlspecialchars($currentSettings['bank_details'] ?? '') ?></textarea>
-                    <span class="upload-hint">
-                        Free text, printed as you type it. Every bank wants a
-                        different set of details and a customer paying by transfer
-                        copies the block whole.
+                    <label class="form-label" for="bank_details">Bank details</label>
+                    <textarea id="bank_details" name="bank_details" class="form-control" rows="4"
+                              placeholder="Equity Bank, Westlands Branch&#10;Account name&#10;0123456789"><?= e($currentSettings['bank_details'] ?? '') ?></textarea>
+                    <span class="hint">
+                        Free text, printed as you type it. Every bank wants a different set of
+                        details and a customer paying by transfer copies the block whole.
                     </span>
                 </div>
             </div>
-            <?php endif; ?>
+        </div>
+    <?php endif; ?>
 
-            <button type="submit" class="btn-submit">Save Settings</button>
-        </form>
+    <div class="form-actions">
+        <button type="submit" class="btn btn-primary">Save settings</button>
     </div>
-</div>
+</form>
 
 <script nonce="<?= csp_nonce() ?>">
     // Show the chosen filename before uploading. Bound here rather
@@ -499,15 +471,12 @@ $pdo = null;
         const input = document.querySelector('[data-logo-input]');
         const hint  = document.getElementById('fileNameHint');
         if (!input || !hint) return;
+        const original = hint.textContent;
         input.addEventListener('change', () => {
             const file = input.files && input.files[0];
-            hint.textContent = file ? 'Selected file: ' + file.name
-                                    : 'Max 2MB. JPG, PNG, WebP allowed.';
-            hint.style.color = file ? 'var(--gold)' : 'var(--ink-soft)';
+            hint.textContent = file ? 'Selected file: ' + file.name : original;
         });
     })();
 </script>
 
-<script src="../../assets/js/legacy.js" defer></script>
-</body>
-</html>
+<?php require __DIR__ . '/../../../includes/footer.php'; ?>
