@@ -63,6 +63,19 @@ if (is_post() && ($_POST['_action'] ?? '') === 'write_off') {
 
 /* ═══ One batch: the recall trace ═══════════════════════════ */
 if ($batchId) {
+    /*  The list above is open to anybody signed in, and should be:
+        somebody at the counter has to know what is on the shelf and
+        what has expired without fetching a manager.
+
+        This view is different. It names every patient who received
+        the batch, with their telephone number — a list of who was
+        given a particular medicine, which is the most sensitive
+        thing this application holds and is not needed to sell
+        anything. It was readable by any signed-in account because
+        the role check sat inside the write-off handler further up,
+        where it guarded the destroying of stock and nothing else. */
+    require_role(ROLE_MANAGER);
+
     $batch = batch_get($batchId);
     if (!$batch) {
         http_response_code(404);
