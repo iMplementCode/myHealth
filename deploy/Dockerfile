@@ -127,8 +127,11 @@ RUN mkdir -p /app/public/uploads /run \
 
 COPY deploy/nginx-site.conf /etc/nginx/http.d/default.conf.template
 
-#  nginx reads no environment variables of its own, so PORT is
-#  substituted into the config at start-up. envsubst touches only
+#  nginx reads no environment variables of its own, so APP_PORT is
+#  substituted into the config at start-up. APP_PORT and not PORT:
+#  platforms inject PORT and do not all point their router at the
+#  value they inject, and following it moved a live site off the
+#  port Traefik was using. See nixpacks.toml. envsubst touches only
 #  ${PORT} and leaves every $variable nginx needs — $uri,
 #  $document_root — alone, which is why they are named here.
 #
@@ -139,9 +142,9 @@ COPY deploy/nginx-site.conf /etc/nginx/http.d/default.conf.template
 RUN printf '%s\n' \
     '#!/bin/sh' \
     'set -e' \
-    ': "${PORT:=3000}"' \
-    'export PORT' \
-    'envsubst "\$PORT" < /etc/nginx/http.d/default.conf.template > /etc/nginx/http.d/default.conf' \
+    ': "${APP_PORT:=3000}"' \
+    'export APP_PORT' \
+    'envsubst "\$APP_PORT" < /etc/nginx/http.d/default.conf.template > /etc/nginx/http.d/default.conf' \
     'php /app/database_structure/migrate.php || true' \
     'php-fpm -D' \
     'exec nginx -g "daemon off;"' \
@@ -154,6 +157,6 @@ EXPOSE 3000
 #  so a database that is down reports as a database that is down
 #  rather than as a dead container to be killed and restarted.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-    CMD php -r 'exit(@file_get_contents("http://127.0.0.1:" . (getenv("PORT") ?: 3000) . "/health.php") ? 0 : 1);'
+    CMD php -r 'exit(@file_get_contents("http://127.0.0.1:" . (getenv("APP_PORT") ?: 3000) . "/health.php") ? 0 : 1);'
 
 CMD ["/usr/local/bin/start.sh"]
