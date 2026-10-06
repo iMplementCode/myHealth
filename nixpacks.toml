@@ -39,6 +39,17 @@ pkgs = ["php"]
 #              but it is the difference between a shop that pauses
 #              and a shop that stops.
 #
+#  PORT     most platforms that run a container tell it which port
+#           to listen on through $PORT, and route to that and
+#           nothing else. This listened on 3000 whatever it was
+#           told, so on any host that picks a different number the
+#           router had nowhere to send a request and answered 502
+#           Bad Gateway — with the application running perfectly
+#           well on a port nobody was asking about.
+#
+#           ${PORT:-3000} keeps 3000 where nothing sets it, which
+#           is every environment this ran in before now.
+#
 #  A note for whoever reads this next: PHP's own manual says this
 #  server "should not be used on a public network". It has no
 #  request timeouts and no connection limits. The application's own
@@ -47,4 +58,4 @@ pkgs = ["php"]
 #  Moving to nginx + php-fpm is worth doing; docs/DEPLOYMENT.md has
 #  that configuration already written and tested.
 [start]
-cmd = "php database_structure/migrate.php || true; PHP_CLI_SERVER_WORKERS=4 php -S 0.0.0.0:3000 -t public public/router.php"
+cmd = "php database_structure/migrate.php || true; PHP_CLI_SERVER_WORKERS=4 php -S 0.0.0.0:${PORT:-3000} -t public public/router.php"

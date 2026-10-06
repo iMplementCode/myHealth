@@ -28,18 +28,43 @@
 
 declare(strict_types=1);
 
+/*  Liveness is answered before anything else is loaded, and that
+    ordering is the whole point rather than a micro-optimisation.
+
+    This used to require bootstrap.php first, which opens a
+    database-backed session. So when the database was unreachable
+    the liveness probe returned 503 along with every other page —
+    a probe that claims to answer "did PHP answer" could not
+    answer it precisely when somebody needed to know.
+
+    An orchestrator reads that 503 as a dead container, kills it,
+    starts another, and that one cannot reach the database either.
+    The visitor gets 502 Bad Gateway from the router, which says
+    nothing about a database, while the application sits there
+    perfectly able to serve the page that would have explained
+    itself. A wrong DB_NAME is enough to cause it.
+
+    Liveness now means what it says: PHP is running and answering.
+    Readiness — whether the dependencies are there — is the deep
+    check below, which is what a probe should use when it wants
+    the database's opinion.
+
+    It also means no host check and no session for this request,
+    both of which are right for a probe arriving on an internal
+    address with no cookies.                                    */
+if (($_GET['deep'] ?? '') === '') {
+    header('Content-Type: application/json; charset=utf-8');
+    header('Cache-Control: no-store');
+    echo json_encode(['status' => 'ok']);
+    exit;
+}
+
 // Reachable without a session: a load balancer has no cookies.
 define('APP_PUBLIC_PAGE', true);
 require_once __DIR__ . '/../includes/bootstrap.php';
 
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
-
-// Liveness: PHP answered, which is the whole question.
-if (($_GET['deep'] ?? '') === '') {
-    echo json_encode(['status' => 'ok']);
-    exit;
-}
 
 // Readiness may be gated, because it describes the inside.
 $token = trim((string) env('HEALTH_TOKEN', ''));
