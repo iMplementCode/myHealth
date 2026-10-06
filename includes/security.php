@@ -48,11 +48,65 @@ if (PHP_SAPI !== 'cli' && !defined('APP_BOOTSTRAPPED')) {
  * header is ignored entirely, which is the safe default for a
  * server exposed directly.
  */
+/**
+ * Say so, once, when the app is behind a proxy it does not trust.
+ *
+ * The safe default — ignore X-Forwarded-For unless the request
+ * came from a listed proxy — is right, and silent, and on a
+ * reverse-proxied host it is silently wrong in a way that
+ * disables several controls at once.
+ *
+ * Every visitor then shares the proxy's address. The login
+ * lockout counts failures by IP as well as by account, so a
+ * handful of bad passwords from anybody locks out everybody:
+ * unauthenticated, remote, and trivial. Rate limits collapse into
+ * one bucket for the whole internet. The audit log records the
+ * proxy's address against every action, which is worse than
+ * recording nothing because it looks like evidence.
+ *
+ * None of that shows up in testing, because a request that
+ * reaches the container directly carries no X-Forwarded-For. The
+ * signature is exactly this: the header is present, and the hop
+ * that sent it is not trusted. That is either a misconfiguration
+ * or somebody forging the header, and both are worth a line in
+ * the log.
+ *
+ * Logged once per process, with the address that would need to go
+ * into TRUSTED_PROXIES, because a warning repeated on every
+ * request is a warning nobody reads.
+ */
+function security_warn_untrusted_proxy(string $remote): void
+{
+    static $warned = false;
+    if ($warned) {
+        return;
+    }
+
+    $forwarded = ($_SERVER['HTTP_X_FORWARDED_FOR'] ?? '')
+              ?: ($_SERVER['HTTP_CF_CONNECTING_IP'] ?? '')
+              ?: ($_SERVER['HTTP_X_REAL_IP'] ?? '');
+
+    if ($forwarded === '') {
+        return;
+    }
+
+    $warned = true;
+    error_log(sprintf(
+        '[SECURITY] X-Forwarded-For present but %s is not in TRUSTED_PROXIES, '
+        . 'so every visitor is being recorded as that one address. The login '
+        . 'lockout and the rate limiter are keyed on it and will apply to all '
+        . 'users at once. Set TRUSTED_PROXIES=%s if that is your proxy.',
+        $remote !== '' ? $remote : 'the connecting address',
+        $remote !== '' ? $remote : '<proxy-address>'
+    ));
+}
+
 function client_ip(): string
 {
     $remote = (string) ($_SERVER['REMOTE_ADDR'] ?? '');
 
     if (!security_from_trusted_proxy($remote)) {
+        security_warn_untrusted_proxy($remote);
         return $remote;
     }
 

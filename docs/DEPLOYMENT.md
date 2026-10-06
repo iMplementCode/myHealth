@@ -251,6 +251,59 @@ is the part that matters.
 lets you set the document root when you create it. Point it
 straight at `~/erp/public` and there is nothing else to do.
 
+### Running it on Dokploy (or any container platform)
+
+The default build uses `nixpacks.toml`, which serves the site with
+PHP's built-in server. That is fine for a demo and wrong for a
+pharmacy: PHP's own manual says it "should not be used on a public
+network", it has no request timeouts, and it answers
+`PHP_CLI_SERVER_WORKERS` requests at a time — four as shipped. Four
+is the whole shop. Three staff with a page open and one PDF
+rendering, and the fourth person waits.
+
+`deploy/Dockerfile` serves it with nginx and php-fpm instead: a pool
+of 24 workers, a queue in front, a ceiling on how long any request
+may hold a worker, and nginx refusing what should never reach PHP.
+In Dokploy set **Build Type → Dockerfile** and the path to
+`deploy/Dockerfile`. It is deliberately not at the repository root,
+so that a live site does not change how it is served because a file
+appeared in a commit.
+
+**Set these before anything else.** Behind Traefik the two that
+matter are:
+
+```
+TRUSTED_PROXIES=172.16.0.0/12     # the Docker network Traefik is on
+APP_HOSTS=pharmacy.example.com
+APP_ENV=production
+```
+
+`TRUSTED_PROXIES` is not optional and it is not cosmetic. Without
+it every visitor is recorded as Traefik's address, and the login
+lockout counts failures by address as well as by account — so a
+handful of bad passwords from anybody locks out every user at once.
+Unauthenticated, remote, and trivial. Rate limits collapse into one
+bucket for the whole internet, and the audit log records the proxy
+against every action, which is worse than recording nothing because
+it looks like evidence.
+
+Confirm the address rather than guessing it: make one real request
+and read the log. The application writes a `[SECURITY]` line naming
+the exact address it saw whenever `X-Forwarded-For` arrives from a
+hop it does not trust.
+
+Then check the rest:
+
+```sh
+php deploy/check-hardening.php
+```
+
+It reports the proxy setting, the host list, `APP_ENV`, whether the
+database account is a superuser, whether the seeded administrator
+password is still the one published in migration 005, and the
+permissions on `.env`. It exits non-zero when something needs
+fixing, so it can go in a deploy step.
+
 ### Running it locally on XAMPP or WAMP
 
 XAMPP serves `C:\xampp\htdocs`, so the project usually ends up
