@@ -228,7 +228,12 @@ function auth_attempt(string $identifier, string $password, bool $remember = fal
      *  the code on the next visit.                                */
     if (two_factor_required()) {
         $started = two_factor_begin($user);
-        if (!$started['sent']) {
+
+        //  A code that could not be sent still leaves the sign-in
+        //  pending, so that one issued from the server can be used.
+        //  Only a failure with nothing pending — an account with no
+        //  email address — ends here.
+        if (!$started['sent'] && empty($started['pending'])) {
             return ['success' => false, 'message' => $started['message']];
         }
         $_SESSION[TWO_FACTOR_SESSION_KEY]['remember'] = $remember;

@@ -132,17 +132,38 @@ function two_factor_begin(array $user): array
     unset($code);
 
     if (!$sent['sent']) {
-        /*  Undo the pending state rather than leaving somebody at a
-         *  code box for a code that is not coming. The reason goes
-         *  to the log, not to the screen. */
-        db_run("UPDATE login_codes SET consumed_at = NOW()
-                 WHERE user_id = :u AND consumed_at IS NULL",
-               [':u' => (int) $user['user_id']]);
+        /*  The code stays live and the sign-in stays pending, which
+         *  is a change from throwing both away.
+         *
+         *  Throwing them away left somebody at the sign-in form with
+         *  a correct password and no road forward at all — and when
+         *  the mail server is the thing that is broken, that is every
+         *  member of staff at once, with no way back in short of
+         *  editing the database. There are no backup codes here.
+         *
+         *  Staying pending gives them somewhere to be, and gives an
+         *  administrator with a shell somewhere to send them:
+         *  deploy/two-factor-code.php issues a code and prints it.
+         *  The password was already correct before any of this, so
+         *  waiting at the code box reveals nothing a failed sign-in
+         *  did not, and the code itself is still required.
+         *
+         *  The reason goes to the log; the screen gets a sentence
+         *  that says what to do.                                   */
         audit_log('auth.2fa_send_failed', 'users', (int) $user['user_id'],
                   ['ip' => client_ip(), 'error' => $sent['error']]);
-        return ['sent' => false,
-                'message' => 'We could not send your sign-in code. Please try again, '
-                           . 'or contact an administrator if it keeps happening.'];
+
+        $_SESSION[TWO_FACTOR_SESSION_KEY] = [
+            'user_id'  => (int) $user['user_id'],
+            'started'  => time(),
+            'resent'   => time(),
+            'remember' => false,
+        ];
+
+        return ['sent'    => false,
+                'pending' => true,
+                'message' => 'We could not email your sign-in code. Try Resend, or ask '
+                           . 'an administrator to issue one from the server.'];
     }
 
     $_SESSION[TWO_FACTOR_SESSION_KEY] = [

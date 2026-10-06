@@ -251,6 +251,64 @@ is the part that matters.
 lets you set the document root when you create it. Point it
 straight at `~/erp/public` and there is nothing else to do.
 
+### Switching two-factor sign-in on
+
+In this order, because the middle step is the one people skip:
+
+```sh
+# 1. configure SMTP_HOST, SMTP_USER, SMTP_PASS, MAIL_FROM
+# 2. prove it actually sends
+php deploy/check-mail.php you@yourdomain.co.ke
+# 3. only then
+TWO_FACTOR_ENABLED=true
+```
+
+Turning it on without working mail does **not** lock anybody out.
+The application signs people in without a code and writes a line to
+the log saying it did, because refusing every sign-in would close
+the shop. The danger is quieter than a lockout: two-factor appears
+to be on, reports as on, and is protecting nobody.
+`deploy/check-hardening.php` reports that combination as a failure.
+
+There are no backup codes. If the mail server breaks later, sign-in
+stops at the code box rather than at the password, and an
+administrator with a shell issues a code:
+
+```sh
+php deploy/two-factor-code.php pharmacist@example.com
+```
+
+That code behaves like an emailed one — single use, same expiry —
+and is written to the audit log as issued from the console. Anybody
+who can run it already has the database, so it gives away nothing
+that was being protected; if it is being used routinely rather than
+in an emergency, the log says so and the mail server is what needs
+fixing.
+
+### Migrations on every push
+
+They already run on deploy — `migrate.php` runs before anything
+listens, in both `nixpacks.toml` and `deploy/Dockerfile`. Pushing to
+GitHub triggers the rebuild, the container starts, the migrations
+apply. That is the right place for them: the database is reachable
+from the application and from nowhere else.
+
+What `.github/workflows/migrations.yml` adds is the half before
+that. On every push it builds the whole database from `schema.sql`
+and every migration on a real PostgreSQL, runs them a second time to
+prove they are idempotent, syntax-checks every PHP file, and asserts
+the invariants that live in the database rather than in PHP — that
+an unbalanced journal entry is refused, that nothing posts to a
+heading, that one document cannot post twice.
+
+A broken migration otherwise reaches the server, where `|| true` in
+the start command swallows it and the site comes up serving
+yesterday's schema behind a banner only an administrator sees. Open,
+and subtly wrong.
+
+Running migrations against production *from* GitHub would mean
+opening the database to GitHub's runners. Don't.
+
 ### Running it on Dokploy (or any container platform)
 
 The default build uses `nixpacks.toml`, which serves the site with

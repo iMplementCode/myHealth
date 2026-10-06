@@ -1,0 +1,193 @@
+# ============================================================
+#  Every push builds the database from nothing
+# ------------------------------------------------------------
+#  Migrations already run on deploy: the container runs
+#  migrate.php before anything listens, in both nixpacks.toml and
+#  deploy/Dockerfile. That is the right place for them — the
+#  database is reachable from the application and from nowhere
+#  else, which is how it should stay. Running migrations against
+#  production *from* GitHub would mean opening the database to
+#  GitHub's runners, and a pharmacy's patient records should not
+#  be reachable from a CI service on the public internet.
+#
+#  What was missing is the half before that. A broken migration
+#  today is found by the deploy, at which point `|| true` in the
+#  start command swallows it and the site comes up serving
+#  yesterday's schema with a banner only an administrator sees.
+#  The shop is open and subtly wrong.
+#
+#  So this builds the whole database from schema.sql and every
+#  migration, on a real PostgreSQL, on every push. A migration
+#  that cannot run never reaches the server.
+#
+#  It also runs them twice. Migrations are supposed to be
+#  idempotent and the runner tracks what it has applied; the
+#  second pass proves both, because a migration that works once
+#  and fails on a re-run is a migration that breaks the next
+#  deploy rather than this one.
+# ============================================================
+
+name: Database and code checks
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  migrations:
+    name: Build the schema from nothing
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: myhealth
+          POSTGRES_PASSWORD: ci-not-a-secret
+          POSTGRES_DB: myhealth_ci
+        ports: ['5432:5432']
+        # Without this the job races the database and fails for a
+        # reason that has nothing to do with the migrations.
+        options: >-
+          --health-cmd "pg_isready -U myhealth"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_pgsql
+          coverage: none
+
+      - name: Composer
+        run: composer install --no-interaction --no-progress --prefer-dist
+
+      - name: Syntax-check every PHP file
+        # Cheap, and catches the parse error that would otherwise
+        # take the site down on deploy rather than here.
+        run: |
+          find . -path ./vendor -prune -o -name '*.php' -print0 \
+            | xargs -0 -n1 -P4 php -l > /dev/null
+
+      - name: Build the schema
+        env:
+          PGPASSWORD: ci-not-a-secret
+        run: |
+          psql -h localhost -U myhealth -d myhealth_ci -v ON_ERROR_STOP=1 \
+               -q -f database_structure/schema.sql
+
+      - name: Apply every migration
+        env:
+          DB_HOST: localhost
+          DB_PORT: '5432'
+          DB_NAME: myhealth_ci
+          DB_USER: myhealth
+          DB_PASS: ci-not-a-secret
+          MIGRATE_DB_WAIT: '30'
+        run: php database_structure/migrate.php
+
+      - name: Apply them again — nothing should move
+        env:
+          DB_HOST: localhost
+          DB_PORT: '5432'
+          DB_NAME: myhealth_ci
+          DB_USER: myhealth
+          DB_PASS: ci-not-a-secret
+        run: |
+          out=$(php database_structure/migrate.php)
+          echo "$out"
+          echo "$out" | grep -q "Everything already up to date" || {
+            echo "::error::A second run applied something. Migrations are not idempotent,"
+            echo "::error::so the next deploy will try to apply it again."
+            exit 1
+          }
+
+      - name: The invariants the schema is supposed to enforce
+        # These are the rules that live in the database rather than
+        # in PHP, so PHP cannot be what proves them. Each one is
+        # written here as the attack on it: if the constraint is
+        # ever dropped, this step fails instead of the books
+        # quietly going out of balance.
+        env:
+          PGPASSWORD: ci-not-a-secret
+        run: |
+          set -e
+          q() { psql -h localhost -U myhealth -d myhealth_ci -v ON_ERROR_STOP=1 -tAc "$1"; }
+
+          CASH=$(q "SELECT account_id FROM accounts WHERE code='1110'")
+          SALE=$(q "SELECT account_id FROM accounts WHERE code='4100'")
+          HEAD=$(q "SELECT account_id FROM accounts WHERE code='1000'")
+
+          echo "An unbalanced journal entry must be refused"
+          if q "BEGIN;
+                WITH e AS (INSERT INTO journal_entries (entry_number, entry_date)
+                           VALUES ('CI-UNBAL', CURRENT_DATE) RETURNING entry_id)
+                INSERT INTO journal_lines (entry_id, account_id, debit, credit)
+                SELECT e.entry_id, a.account_id,
+                       CASE WHEN a.code='1110' THEN 100 ELSE 0 END,
+                       CASE WHEN a.code='4100' THEN 90  ELSE 0 END
+                  FROM e, accounts a WHERE a.code IN ('1110','4100');
+                COMMIT;" 2>/dev/null; then
+            echo "::error::An unbalanced entry was accepted. The balance trigger is gone."
+            exit 1
+          fi
+
+          echo "Posting to a heading must be refused"
+          if q "BEGIN;
+                WITH e AS (INSERT INTO journal_entries (entry_number, entry_date)
+                           VALUES ('CI-HEAD', CURRENT_DATE) RETURNING entry_id)
+                INSERT INTO journal_lines (entry_id, account_id, debit, credit)
+                SELECT e.entry_id, a.account_id,
+                       CASE WHEN a.code='1000' THEN 10 ELSE 0 END,
+                       CASE WHEN a.code='4100' THEN 10 ELSE 0 END
+                  FROM e, accounts a WHERE a.code IN ('1000','4100');
+                COMMIT;" 2>/dev/null; then
+            echo "::error::A posting to a heading account was accepted."
+            exit 1
+          fi
+
+          echo "A balanced entry must be accepted"
+          q "BEGIN;
+             WITH e AS (INSERT INTO journal_entries (entry_number, entry_date)
+                        VALUES ('CI-OK', CURRENT_DATE) RETURNING entry_id)
+             INSERT INTO journal_lines (entry_id, account_id, debit, credit)
+             SELECT e.entry_id, a.account_id,
+                    CASE WHEN a.code='1110' THEN 100 ELSE 0 END,
+                    CASE WHEN a.code='4100' THEN 100 ELSE 0 END
+               FROM e, accounts a WHERE a.code IN ('1110','4100');
+             COMMIT;" > /dev/null
+
+          echo "One document cannot post twice"
+          q "INSERT INTO journal_entries (entry_number, entry_date, source_table, source_id)
+             VALUES ('CI-SRC-1', CURRENT_DATE, 'invoices', 424242)" > /dev/null
+          if q "INSERT INTO journal_entries (entry_number, entry_date, source_table, source_id)
+                VALUES ('CI-SRC-2', CURRENT_DATE, 'invoices', 424242)" 2>/dev/null; then
+            echo "::error::The same document posted twice. The source index is gone."
+            exit 1
+          fi
+
+          # A negative-stock check belongs here too, and is not here:
+          # a database built from nothing has no products and no
+          # batches, so the UPDATE matches no rows and the test passes
+          # without testing anything. A check that cannot fail reads
+          # like coverage and is worse than an absent one. It needs a
+          # seeded batch first, which is a fixture this workflow does
+          # not have yet.
+
+          echo "All invariants held."
+
+      - name: What the database ended up with
+        env:
+          PGPASSWORD: ci-not-a-secret
+        run: |
+          psql -h localhost -U myhealth -d myhealth_ci -tAc \
+            "SELECT count(*) || ' tables, ' ||
+                    (SELECT count(*) FROM information_schema.columns
+                      WHERE table_schema='public') || ' columns'
+               FROM information_schema.tables WHERE table_schema='public'"

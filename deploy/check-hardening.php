@@ -83,6 +83,39 @@ if ($hosts === '') {
     finding('ok', 'APP_HOSTS is set', $hosts);
 }
 
+/* ── Two-factor sign-in ─────────────────────────────────────── */
+
+$twoFactor = filter_var(env('TWO_FACTOR_ENABLED', 'false'), FILTER_VALIDATE_BOOLEAN);
+$smtpHost  = trim((string) env('SMTP_HOST', ''));
+$mailFrom  = trim((string) env('MAIL_FROM', ''));
+
+if ($twoFactor && ($smtpHost === '' || $mailFrom === '')) {
+    finding(
+        'fail',
+        'Two-factor is switched on but cannot send anything',
+        'TWO_FACTOR_ENABLED is true and ' . ($smtpHost === '' ? 'SMTP_HOST' : 'MAIL_FROM')
+        . ' is empty. The application will not refuse every sign-in over this — that would '
+        . 'lock the business out — so it signs people in WITHOUT a code and writes a line '
+        . 'to the log. The effect is that two-factor looks switched on, reports as switched '
+        . 'on, and is not protecting anybody.',
+        'Set SMTP_HOST, SMTP_USER, SMTP_PASS and MAIL_FROM, then prove it with '
+        . 'php deploy/check-mail.php you@yourdomain before relying on it.'
+    );
+} elseif ($twoFactor) {
+    finding('ok', 'Two-factor sign-in is on, with mail configured', $smtpHost);
+} else {
+    finding(
+        'warn',
+        'Two-factor sign-in is off',
+        'A password alone opens a system holding patient records and a controlled drugs '
+        . 'register. Passwords are reused, written down, and phished.',
+        'Configure SMTP, check it with deploy/check-mail.php, then set '
+        . 'TWO_FACTOR_ENABLED=true. If the mail server later fails, sign-in stops at the '
+        . 'code box rather than at the password, and deploy/two-factor-code.php issues a '
+        . 'code from the server so nobody is locked out.'
+    );
+}
+
 /* ── Environment and debugging ──────────────────────────────── */
 
 $envName = (string) env('APP_ENV', 'production');
