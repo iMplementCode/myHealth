@@ -24,6 +24,28 @@ if (auth_check()) {
     redirect('dashboard/index.php');
 }
 
+/*  Two-factor switched off while somebody was part way through it.
+ *
+ *  This page used to ask only whether a pending sign-in existed,
+ *  never whether a code was still being required. So turning
+ *  two-factor off left anybody already at this box still at it,
+ *  waiting for a code that nothing was going to send any more —
+ *  and the state outlives a redeploy, because sessions are kept in
+ *  the database rather than in the container.
+ *
+ *  The same applies when the mail configuration goes away:
+ *  two_factor_required() reports false once SMTP is unset, and
+ *  then holding somebody at a code box is asking them for
+ *  something the application has decided it does not want.
+ *
+ *  Let the pending state go and send them back to sign in. The
+ *  password alone is now enough, by the operator's own setting.  */
+if (!two_factor_required()) {
+    two_factor_abandon();
+    flash('success', 'Two-step sign-in is switched off. Please sign in with your password.');
+    redirect('login.php');
+}
+
 $pending = two_factor_pending();
 if (!$pending) {
     flash('error', 'Please sign in again.');
