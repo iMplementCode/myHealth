@@ -310,30 +310,62 @@ $openGrns = db_all(
       ORDER BY g.grn_id DESC
       LIMIT 200"
 );
+/*  The returnable lines for those receipts, and ONLY those.
+ *
+ *  This is the data behind the line picker: choose a goods receipt
+ *  in the form above and the browser reads the lines for it out of
+ *  the JSON block at the bottom of this page. The receipt dropdown
+ *  is built from $openGrns, which stops at 200 — so lines for any
+ *  receipt outside those 200 cannot be selected, cannot be
+ *  displayed, and cannot be used.
+ *
+ *  It fetched them anyway. Every goods receipt line the shop had
+ *  ever recorded was read, run through a correlated subquery over
+ *  debit_note_items one row at a time, built into a PHP array, and
+ *  then JSON-encoded into the HTML of a page that could only ever
+ *  use the newest 200 receipts' worth. The sibling query directly
+ *  above has had LIMIT 200 all along; this one simply never got
+ *  the same treatment.
+ *
+ *  Scoped to the receipts actually on offer, with the already-
+ *  returned quantities aggregated once in a derived table instead
+ *  of recomputed per row, and the "nothing left to return" lines
+ *  dropped in SQL rather than by PHP after they have been sent.
+ *  Same rows, same figures, same order as before.                 */
 $grnLines = [];
-foreach (db_all(
-    "SELECT gi.grn_id, gi.grn_item_id, p.name, p.sku, gi.unit_cost,
-            (gi.quantity_received - COALESCE((
-                 SELECT SUM(dni.quantity_returned) FROM debit_note_items dni
+$openGrnIds = array_map(static fn(array $g): int => (int) $g['grn_id'], $openGrns);
+
+if ($openGrnIds) {
+    //  Integers straight from the database, cast again here, so this
+    //  is a list of numbers and cannot be anything else.
+    $idList = implode(',', $openGrnIds);
+
+    foreach (db_all(
+        "SELECT gi.grn_id, gi.grn_item_id, p.name, p.sku, gi.unit_cost,
+                (gi.quantity_received - COALESCE(r.returned, 0)) AS returnable
+           FROM grn_items gi
+           JOIN grns g ON g.grn_id = gi.grn_id
+           JOIN products p ON p.product_id = gi.product_id
+           LEFT JOIN (
+                SELECT dni.grn_item_id, SUM(dni.quantity_returned) AS returned
+                  FROM debit_note_items dni
                   JOIN debit_notes dn ON dn.debit_note_id = dni.debit_note_id
-                 WHERE dni.grn_item_id = gi.grn_item_id AND dn.status <> 'cancelled'
-             ), 0)) AS returnable
-       FROM grn_items gi
-       JOIN grns g ON g.grn_id = gi.grn_id
-       JOIN products p ON p.product_id = gi.product_id
-      WHERE g.status <> 'cancelled'
-      ORDER BY p.name"
-) as $l) {
-    if ((float) $l['returnable'] <= 0) {
-        continue;
+                 WHERE dn.status <> 'cancelled'
+                 GROUP BY dni.grn_item_id
+           ) r ON r.grn_item_id = gi.grn_item_id
+          WHERE g.status <> 'cancelled'
+            AND gi.grn_id IN ($idList)
+            AND (gi.quantity_received - COALESCE(r.returned, 0)) > 0
+          ORDER BY p.name"
+    ) as $l) {
+        $grnLines[(int) $l['grn_id']][] = [
+            'item_id'    => (int) $l['grn_item_id'],
+            'name'       => $l['name'],
+            'sku'        => $l['sku'],
+            'returnable' => (float) $l['returnable'],
+            'cost'       => (float) $l['unit_cost'],
+        ];
     }
-    $grnLines[(int) $l['grn_id']][] = [
-        'item_id'    => (int) $l['grn_item_id'],
-        'name'       => $l['name'],
-        'sku'        => $l['sku'],
-        'returnable' => (float) $l['returnable'],
-        'cost'       => (float) $l['unit_cost'],
-    ];
 }
 $breadcrumbs  = [['label' => 'Purchasing'], ['label' => 'Debit Notes']];
 
