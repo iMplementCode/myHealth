@@ -60,46 +60,6 @@ if (is_post()) {
     }
 }
 
-/**
- * Where it is safe to send someone after they sign in.
- *
- * "Return to where you were" is the one place an application
- * cheerfully redirects to a URL somebody else chose. A phishing
- * page reached through a link on the real sign-in domain is far
- * more convincing than one that is not, so nothing but a path on
- * this site is accepted — no scheme, no host, and in particular
- * not //evil.example, which is a URL to another site even though
- * it looks like a path.
- */
-function login_safe_target(string $target): string
-{
-    $fallback = 'dashboard/index.php';
-
-    if ($target === '' || str_contains($target, "\n") || str_contains($target, "\r")) {
-        return $fallback;
-    }
-    // Anything with a scheme, or a protocol-relative //host.
-    if (preg_match('#^[a-z][a-z0-9+.-]*:#i', $target) || str_starts_with($target, '//')) {
-        return $fallback;
-    }
-    if (str_contains($target, '..')) {
-        return $fallback;
-    }
-
-    // The stored value is a REQUEST_URI, so it carries the base
-    // path the app is served from; url() adds that back.
-    $path = ltrim((string) parse_url($target, PHP_URL_PATH), '/');
-    if (APP_URL !== '' && str_starts_with('/' . $path, APP_URL . '/')) {
-        $path = ltrim(substr('/' . $path, strlen(APP_URL)), '/');
-    }
-    if ($path === '' || !str_ends_with($path, '.php')) {
-        return $fallback;
-    }
-
-    $query = parse_url($target, PHP_URL_QUERY);
-    return $path . ($query ? '?' . $query : '');
-}
-
 $flashes = flash_pull();
 $year    = date('Y');
 ?>

@@ -92,7 +92,18 @@ function password_reset_base_url(): ?string
 
     $host = security_safe_host();
     if ($host !== null && $host !== '') {
-        $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+        /*  request_is_https() and not $_SERVER['HTTPS'], which is
+         *  unset on every deployment where something else terminates
+         *  TLS — which is this one. Reading it directly emailed
+         *  people an http:// link, so the reset token made its first
+         *  trip across the wire in clear and only then got bounced
+         *  to https. By that point it had been sent.
+         *
+         *  request_is_https() weighs X-Forwarded-Proto against who
+         *  sent it, which is the whole reason it exists; there is no
+         *  reason for a second, weaker copy of the same decision
+         *  here.                                                   */
+        $scheme = request_is_https() ? 'https' : 'http';
         return $scheme . '://' . $host;
     }
 

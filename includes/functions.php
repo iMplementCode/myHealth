@@ -158,7 +158,32 @@ function asset(string $path): string
 /** Send a redirect to an app path and stop execution. */
 function redirect(string $path): void
 {
-    header('Location: ' . url($path));
+    /*  The last gate before a Location header. Every caller in the
+     *  application passes a literal internal path, and the one that
+     *  does not — sign-in, returning somebody to where they were —
+     *  has already run its target through login_safe_target(). This
+     *  is here for the caller that has not been written yet.
+     *
+     *  Two things make a path leave the site. A backslash, because
+     *  browsers read it as a forward slash, so "/\evil.example"
+     *  becomes "//evil.example"; and a leading "//", which is a URL
+     *  to another host that merely looks like a path. Either one is
+     *  refused outright rather than cleaned up: a redirect nobody
+     *  meant to write is a bug, and following it somewhere
+     *  unexpected is worse than landing on the dashboard.
+     *
+     *  Served at the root of a domain APP_URL is empty, so url()
+     *  adds no prefix to hide behind — the check has to be on the
+     *  finished header, not on the argument.                       */
+    $location = url($path);
+
+    if (str_contains($location, '\\')
+        || preg_match('#^/{2,}#', $location) === 1) {
+        error_log('[SECURITY] Refused an off-site redirect to: ' . $location);
+        $location = url('dashboard/index.php');
+    }
+
+    header('Location: ' . $location);
     exit;
 }
 
@@ -493,11 +518,45 @@ function initials(string $name): string
  *  Pagination
  * ──────────────────────────────────────────────────────────── */
 
-/** True when a table exists in the connected database. */
+/**
+ * True when a table exists in the connected database.
+ *
+ * Cached per request, for the same reason column_exists() below is:
+ * a table cannot appear or disappear part way through rendering a
+ * page, so asking the catalogue twice is asking a question whose
+ * answer is already known.
+ *
+ * It was worth measuring rather than assuming. With every statement
+ * logged, one dashboard render ran this query eighteen times, and
+ * asked about only twelve distinct tables — the notification
+ * scanner, the session store, the company letterhead and the
+ * dashboard panels all guard themselves this way, and several ask
+ * about the same table. Six of the eighteen were a round trip to
+ * re-learn something already known, on every page, for every user.
+ *
+ * The remaining twelve are twelve different tables, so this cache
+ * cannot help them within one request. They are not cached across
+ * requests on purpose: that answer changes when a migration runs,
+ * and a stale "no" would leave a page insisting a table is missing
+ * until the process recycled.
+ *
+ * A failed lookup is deliberately NOT cached. The catch is there for
+ * a database that has gone away mid-request, and remembering "no"
+ * from a connection error would turn one blip into a page that
+ * claims every table is missing.
+ */
 function table_exists(string $table): bool
 {
+    static $seen = [];
+
+    if (array_key_exists($table, $seen)) {
+        return $seen[$table];
+    }
+
     try {
-        return db_value("SELECT to_regclass(:t) IS NOT NULL", [':t' => $table]) === true;
+        return $seen[$table] = db_value(
+            "SELECT to_regclass(:t) IS NOT NULL", [':t' => $table]
+        ) === true;
     } catch (Throwable $e) {
         return false;
     }

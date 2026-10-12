@@ -395,7 +395,22 @@ function stream_document_pdf(array $doc): void
 
     $options = new \Dompdf\Options();
     $options->set('isHtml5ParserEnabled', true);
-    $options->set('isRemoteEnabled', true);
+    /*  Remote fetching off. The logo is the only image on these
+        documents and it arrives as a data URI from
+        company_logo_img_tag(), which dompdf decodes itself — so
+        nothing here ever needed to reach the network.
+
+        Left on, dompdf resolves any URL it finds in the markup by
+        fetching it from the server. Everything placed into these
+        templates goes through $esc, so there is no way in today;
+        the point is that there does not need to be a way in
+        tomorrow either. An unescaped field added later would turn
+        a cosmetic bug into the server fetching a URL somebody else
+        chose, from inside the network, which is how an internal
+        metadata endpoint ends up in a PDF.
+
+        The receipt and the credit note already had this off. */
+    $options->set('isRemoteEnabled', false);
 
     $dompdf = new \Dompdf\Dompdf($options);
     $dompdf->loadHtml($html);
@@ -605,7 +620,22 @@ function stream_delivery_pdf(array $doc): void
 
     $options = new \Dompdf\Options();
     $options->set('isHtml5ParserEnabled', true);
-    $options->set('isRemoteEnabled', true);
+    /*  Remote fetching off. The logo is the only image on these
+        documents and it arrives as a data URI from
+        company_logo_img_tag(), which dompdf decodes itself — so
+        nothing here ever needed to reach the network.
+
+        Left on, dompdf resolves any URL it finds in the markup by
+        fetching it from the server. Everything placed into these
+        templates goes through $esc, so there is no way in today;
+        the point is that there does not need to be a way in
+        tomorrow either. An unescaped field added later would turn
+        a cosmetic bug into the server fetching a URL somebody else
+        chose, from inside the network, which is how an internal
+        metadata endpoint ends up in a PDF.
+
+        The receipt and the credit note already had this off. */
+    $options->set('isRemoteEnabled', false);
 
     $dompdf = new \Dompdf\Dompdf($options);
     $dompdf->loadHtml($html);

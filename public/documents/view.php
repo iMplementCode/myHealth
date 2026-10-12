@@ -34,7 +34,17 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../includes/bootstrap.php';
 
-require_login();
+/*  Signed in is not the bar. Every page that produces one of these
+ *  links — invoice payments, purchase payments, credit notes,
+ *  investor agreements, staff advances — is behind
+ *  require_role(ROLE_MANAGER), so a salesperson cannot reach the
+ *  screens at all. Letting one read the files anyway, on nothing
+ *  more than a session, means the folder is protected by how hard
+ *  the filename is to guess and by nothing else. These are
+ *  customers' bank slips and signed investor agreements; the
+ *  endpoint that hands them out asks for the same role as the
+ *  pages that link to them.                                       */
+require_role(ROLE_MANAGER);
 
 /*  The folders this endpoint will serve. Anything not listed here
  *  is refused even if it exists — a new upload folder has to be

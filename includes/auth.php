@@ -684,6 +684,75 @@ function require_login(): void
 }
 
 /**
+ * Where it is safe to send somebody once they are signed in.
+ *
+ * "Return to where you were" is the one place an application
+ * cheerfully redirects to a URL somebody else chose. require_login()
+ * stores REQUEST_URI, which is whatever was typed or linked, so by
+ * the time sign-in reads it back it is request data and not ours.
+ * A phishing page reached through a link on the real sign-in domain
+ * is far more convincing than one that is not, so nothing but a path
+ * on this site is accepted — no scheme, no host, and in particular
+ * not //evil.example, which is a URL to another site even though it
+ * looks like a path.
+ *
+ * This lived twice, once in login.php and once in verify.php, which
+ * is how one of them ends up fixed and the other does not. One copy,
+ * both callers.
+ */
+function login_safe_target(string $target): string
+{
+    $fallback = 'dashboard/index.php';
+
+    //  A newline would let the rest of the Location header, or
+    //  further headers, be written by whoever chose the target.
+    if ($target === '' || str_contains($target, "\n") || str_contains($target, "\r")) {
+        return $fallback;
+    }
+
+    /*  A backslash is a forward slash as far as a browser is
+     *  concerned. The WHATWG URL standard says so, and Chrome,
+     *  Firefox and Safari all do it, so "\evil.example/x.php" is
+     *  read as "//evil.example/x.php" — a URL to another site — and
+     *  the //host check below never sees it because the string it is
+     *  given starts with a backslash.
+     *
+     *  This mattered here rather than in theory. Served at the root
+     *  of a domain, which is how this is deployed, APP_URL is the
+     *  empty string, so url() turns that target into the Location
+     *  header "/\evil.example/x.php" and the browser goes to
+     *  evil.example. A phishing page reached by signing in at the
+     *  real pharmacy's own address is about as convincing as
+     *  phishing gets.
+     *
+     *  So the separators are made uniform before anything is
+     *  decided about them. No legitimate path here contains a
+     *  backslash.                                                  */
+    $target = str_replace('\\', '/', $target);
+
+    //  Anything with a scheme, or a protocol-relative //host.
+    if (preg_match('#^[a-z][a-z0-9+.-]*:#i', $target) || str_starts_with($target, '//')) {
+        return $fallback;
+    }
+    if (str_contains($target, '..')) {
+        return $fallback;
+    }
+
+    //  The stored value is a REQUEST_URI, so it carries the base
+    //  path the app is served from; url() adds that back.
+    $path = ltrim((string) parse_url($target, PHP_URL_PATH), '/');
+    if (APP_URL !== '' && str_starts_with('/' . $path, APP_URL . '/')) {
+        $path = ltrim(substr('/' . $path, strlen(APP_URL)), '/');
+    }
+    if ($path === '' || !str_ends_with($path, '.php')) {
+        return $fallback;
+    }
+
+    $query = parse_url($target, PHP_URL_QUERY);
+    return $path . ($query ? '?' . $query : '');
+}
+
+/**
  * Guard: require one of the given roles. Administrators always pass.
  *
  * Sends a 403 page to a browser and a 403 JSON body to a fetch, for

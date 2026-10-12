@@ -82,7 +82,7 @@ if (is_post()) {
             $target = $_SESSION['intended'] ?? 'dashboard/index.php';
             unset($_SESSION['intended']);
             flash('success', $result['message']);
-            redirect(login_safe_target_2fa($target));
+            redirect(login_safe_target($target));
         }
         $errors[] = $result['message'];
         // The pending state may have been torn up by that attempt.
@@ -91,38 +91,6 @@ if (is_post()) {
             redirect('login.php');
         }
     }
-}
-
-/**
- * Where it is safe to send somebody after the code.
- *
- * The same rule the sign-in form applies, and for the same reason:
- * "return to where you were" is the one place an application
- * redirects to a URL somebody else chose, and a phishing page
- * reached from the real domain is far more convincing than one
- * that is not. Nothing but a path on this site is accepted.
- */
-function login_safe_target_2fa(string $target): string
-{
-    $fallback = 'dashboard/index.php';
-    if ($target === '' || str_contains($target, "\n") || str_contains($target, "\r")) {
-        return $fallback;
-    }
-    if (preg_match('#^[a-z][a-z0-9+.-]*:#i', $target) || str_starts_with($target, '//')) {
-        return $fallback;
-    }
-    if (str_contains($target, '..')) {
-        return $fallback;
-    }
-    $path = ltrim((string) parse_url($target, PHP_URL_PATH), '/');
-    if (APP_URL !== '' && str_starts_with('/' . $path, APP_URL . '/')) {
-        $path = ltrim(substr('/' . $path, strlen(APP_URL)), '/');
-    }
-    if ($path === '' || !str_ends_with($path, '.php')) {
-        return $fallback;
-    }
-    $query = parse_url($target, PHP_URL_QUERY);
-    return $path . ($query ? '?' . $query : '');
 }
 
 // Which inbox to open, without printing the address in full on a

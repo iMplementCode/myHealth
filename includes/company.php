@@ -107,17 +107,59 @@ function company_logo_blob(): ?array
     return $answer = ['bytes' => $bytes, 'mime' => (string) ($row['mime'] ?: 'image/png')];
 }
 
+/**
+ * Is there a stored logo, and when did it last change?
+ *
+ * One query, no image bytes, cached for the request. Returns the
+ * timestamp as a cache-busting stamp, or null when there is no
+ * usable logo.
+ *
+ * This exists because company_logo_url() used to answer "is there a
+ * logo?" by calling company_logo_blob(), which SELECTs the bytes.
+ * includes/header.php calls company_logo_url() on EVERY page, to
+ * decide whether to emit a favicon link — so every page view dragged
+ * the whole image out of the database to look at whether it was
+ * there. A shop with a 2 MB logo was moving 2 MB from the database
+ * container to the application container to render a 60-byte <link>
+ * tag, on every click, for every user.
+ *
+ * The irony is that company_logo_blob() has a comment directly above
+ * it explaining that the logo is kept off company_settings so it is
+ * not "read two megabytes at a time, forever". It was being read
+ * that way anyway, through a different door.
+ *
+ * octet_length() is checked in SQL so an empty row counts as no
+ * logo, which is the same test company_logo_blob() applies to the
+ * bytes once it has them.
+ */
+function company_logo_stamp(): ?string
+{
+    static $answer = false;
+    if ($answer !== false) {
+        return $answer;
+    }
+
+    if (!table_exists('company_logo')) {
+        return $answer = null;
+    }
+
+    try {
+        $stamp = db_value(
+            'SELECT EXTRACT(EPOCH FROM updated_at)::bigint
+               FROM company_logo
+              WHERE id = 1 AND octet_length(bytes) > 0'
+        );
+    } catch (Throwable $e) {
+        return $answer = null;
+    }
+
+    return $answer = ($stamp === null || $stamp === false) ? null : (string) $stamp;
+}
+
 /** When the stored logo last changed — for cache-busting a URL. */
 function company_logo_version(): string
 {
-    if (!table_exists('company_logo')) {
-        return '0';
-    }
-    try {
-        return (string) (db_value('SELECT EXTRACT(EPOCH FROM updated_at)::bigint FROM company_logo WHERE id = 1') ?? '0');
-    } catch (Throwable $e) {
-        return '0';
-    }
+    return company_logo_stamp() ?? '0';
 }
 
 /**
@@ -215,8 +257,9 @@ function company_logo_url(): ?string
      *  of their own. The version is the timestamp it was saved, so
      *  a changed logo is fetched again instead of the browser
      *  showing yesterday's from cache. */
-    if (company_logo_blob() !== null) {
-        return url('company-logo.php?v=' . company_logo_version());
+    $stamp = company_logo_stamp();
+    if ($stamp !== null) {
+        return url('company-logo.php?v=' . $stamp);
     }
 
     // Derived from the file that was actually found, so the browser and
