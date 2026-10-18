@@ -20,7 +20,7 @@ require_once __DIR__ . '/../includes/bootstrap.php';
 require_once __DIR__ . '/../includes/password_reset.php';
 
 if (auth_check()) {
-    redirect('dashboard/index.php');
+    redirect(default_landing_page());
 }
 
 /*  Kept in the form rather than the session. A session started for

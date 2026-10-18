@@ -275,11 +275,13 @@ function hr_employee_list(
     $limit  = max(1, min(200, $limit));
     $offset = max(0, $offset);
 
+    //  The whole row, not a chosen few columns. The list screen
+    //  needs every field to prefill its edit form, and fetching a
+    //  page of names and then asking for each record separately is
+    //  a query per row — the N+1 that migration 067's notes were
+    //  written about. A page of 25 employees is a few kilobytes.
     return db_all(
-        "SELECT e.employee_id, e.staff_number, e.first_name, e.last_name,
-                e.job_title, e.cadre, e.employment_type, e.status,
-                e.hire_date, e.phone, e.prof_expiry, e.user_id,
-                d.name AS department_name
+        "SELECT e.*, d.name AS department_name
            FROM employees e
            LEFT JOIN departments d ON d.department_id = e.department_id
            $sql

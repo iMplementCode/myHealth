@@ -502,7 +502,8 @@ function leave_requests_list(array $f = [], int $limit = 25, int $offset = 0): a
     return db_all(
         "SELECT r.request_id, r.request_number, r.start_date, r.end_date,
                 r.days_requested, r.status, r.reason, r.submitted_at,
-                r.cover_warning, r.document_url,
+                r.cover_warning, r.document_url, r.dept_note, r.final_note,
+                r.leave_type_id,
                 t.name AS type_name, t.requires_document,
                 e.employee_id, e.first_name, e.last_name, e.staff_number, e.job_title,
                 d.name AS department_name

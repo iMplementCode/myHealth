@@ -18,7 +18,14 @@ require_once __DIR__ . '/../../includes/bootstrap.php';
 require_once __DIR__ . '/../../includes/counter.php';
 require_once __DIR__ . '/../../includes/icons.php';
 
-require_role(ROLE_SALES);
+/*  Salesperson AND manager. require_role(ROLE_SALES) alone
+ *  admits a salesperson and an administrator, because
+ *  administrators pass everything — and refuses a MANAGER, who
+ *  is neither. The effect was that the person running the shop
+ *  could not serve at the till or open a patient record, which
+ *  nobody intended and which only showed up when a fourth role
+ *  was added and the whole matrix was looked at.                */
+require_role(ROLE_SALES, ROLE_MANAGER);
 
 /* ── Search, as JSON, for the type-ahead ──────────────────── */
 if (($_GET['find'] ?? '') !== '') {

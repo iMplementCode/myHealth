@@ -151,6 +151,25 @@ function nav_items(): array
             ],
         ],
         [
+            'label' => 'People',
+            'icon'  => 'users',
+            'roles' => [ROLE_ADMIN, ROLE_MANAGER],
+            'children' => [
+                ['label' => 'Employees', 'icon' => 'users',      'href' => 'hr/employees.php'],
+                ['label' => 'Departments', 'icon' => 'building', 'href' => 'hr/departments.php'],
+                ['label' => 'Leave', 'icon' => 'calendar',       'href' => 'hr/leave.php'],
+                ['label' => 'Leave Settings', 'icon' => 'cog',   'href' => 'hr/leave_settings.php',
+                 'roles' => [ROLE_ADMIN]],
+            ],
+        ],
+        //  Everybody's own leave, including the people whose only
+        //  reason to sign in is this page.
+        [
+            'label' => 'My Leave',
+            'icon'  => 'calendar',
+            'href'  => 'hr/my_leave.php',
+        ],
+        [
             'label' => 'Users',
             'icon'  => 'users',
             'roles' => [ROLE_ADMIN],
@@ -202,9 +221,35 @@ function nav_items(): array
     return $visible;
 }
 
-/** True when the current user may see a nav item (by role). */
+/**
+ * True when the current user may see a nav item.
+ *
+ * Two rules, and the second one exists because of the Staff role.
+ *
+ * Most items here declare no roles at all, which has always meant
+ * "anybody signed in" — correct while every role was trusted with
+ * the shop floor. Staff is not: it is the role that exists so a
+ * storekeeper can apply for leave without being handed the till.
+ * Left alone, the menu would offer them Counter, Patients,
+ * Inventory and Sales, and every one would answer 403 when
+ * clicked — a menu that says yes to a page that says no.
+ *
+ * Rather than add a roles key to a dozen items and have to
+ * remember it for every item added afterwards, the Staff role is
+ * filtered against the same allowlist the bootstrap enforces. The
+ * menu and the guard therefore cannot disagree.
+ */
 function nav_can_see(array $item): bool
 {
+    if (current_role() === ROLE_STAFF) {
+        //  A parent with children is kept or dropped on whether any
+        //  of its children survive, which the caller works out.
+        if (empty($item['href'])) {
+            return true;
+        }
+        return in_array($item['href'], staff_allowed_pages(), true);
+    }
+
     if (empty($item['roles']) || is_admin()) {
         return true;
     }

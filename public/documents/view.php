@@ -44,12 +44,17 @@ require_once __DIR__ . '/../../includes/bootstrap.php';
  *  customers' bank slips and signed investor agreements; the
  *  endpoint that hands them out asks for the same role as the
  *  pages that link to them.                                       */
-require_role(ROLE_MANAGER);
+/*  — except for one folder, below. Leave documents are a sick
+ *  note or a burial permit, and the person they belong to has to
+ *  be able to open their own. So the role check moved from here
+ *  to just after the folder is known: manager for everything that
+ *  was here before, and for leave, manager OR the employee whose
+ *  document it is.                                               */
 
 /*  The folders this endpoint will serve. Anything not listed here
  *  is refused even if it exists — a new upload folder has to be
  *  named deliberately rather than becoming readable by accident. */
-const PRIVATE_DOC_FOLDERS = ['payments', 'refunds', 'investments', 'advances'];
+const PRIVATE_DOC_FOLDERS = ['payments', 'refunds', 'investments', 'advances', 'leave'];
 
 /*  And the only types that can come back. The upload path already
  *  refuses anything else, but a file that arrived some other way
@@ -84,6 +89,34 @@ $name = basename($name);
 if (!in_array($folder, PRIVATE_DOC_FOLDERS, true)) {
     http_response_code(404);
     exit('Not found.');
+}
+
+/*  ── Who may read this folder ────────────────────────────────
+ *  Everything that was here before is a customer's bank slip or a
+ *  signed agreement, and stays manager-and-above.
+ *
+ *  A leave document is different in both directions: it is more
+ *  sensitive — a sick note is medical information about a member
+ *  of staff — and its owner has a right to it. So the rule is the
+ *  people who decide leave, plus the one person it is about. The
+ *  ownership test is a lookup against the request that references
+ *  the file, not a guess from the filename.                      */
+if ($folder === 'leave') {
+    if (!is_admin() && !user_has_role(ROLE_MANAGER)) {
+        $mine  = function_exists('hr_current_employee') ? hr_current_employee() : null;
+        $owned = $mine && db_value(
+            'SELECT 1 FROM leave_requests
+              WHERE employee_id = :e AND document_url LIKE :f
+              LIMIT 1',
+            [':e' => (int) $mine['employee_id'], ':f' => '%/leave/' . $name]
+        );
+        if (!$owned) {
+            http_response_code(404);
+            exit('Not found.');
+        }
+    }
+} else {
+    require_role(ROLE_MANAGER);
 }
 
 $ext = strtolower(pathinfo($name, PATHINFO_EXTENSION));

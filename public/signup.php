@@ -19,7 +19,7 @@ define('APP_PUBLIC_PAGE', true);
 require_once __DIR__ . '/../includes/bootstrap.php';
 
 if (auth_check()) {{
-    redirect('dashboard/index.php');
+    redirect(default_landing_page());
 }}
 
 $year = date('Y');
