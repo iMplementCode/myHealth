@@ -109,11 +109,16 @@ foreach (leave_types_all() as $t) {
  *  not eligible for is not that.                                */
 $balances = [];
 if ($me) {
+    //  Three queries for all of them, rather than three per type —
+    //  then drop the ones this person is not eligible for.
+    $blocked = [];
     foreach ($typeOptions as $t) {
-        if ($t['blocked'] !== null) {
-            continue;
+        $blocked[(int) $t['leave_type_id']] = $t['blocked'];
+    }
+    foreach (leave_balances_for((int) $me['employee_id'], $year) as $b) {
+        if (($blocked[(int) $b['leave_type_id']] ?? null) === null) {
+            $balances[] = $b;
         }
-        $balances[] = $t + ['balance' => leave_balance((int) $me['employee_id'], (int) $t['leave_type_id'], $year)];
     }
 }
 

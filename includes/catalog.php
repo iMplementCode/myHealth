@@ -13,6 +13,36 @@
 
 declare(strict_types=1);
 
+/**
+ * What the public is allowed to be shown, in one place.
+ *
+ * is_active and is_published were the whole test, and
+ * is_published is a checkbox on the product form. Ticking it on
+ * a prescription-only medicine put that medicine — by name, with
+ * its price and its exact stock on hand — on an endpoint that
+ * needs no authentication at all. Verified by doing it: a
+ * Schedule II controlled drug came back to an anonymous GET,
+ * with 240 units against it.
+ *
+ * Two different problems in one row. Advertising a
+ * prescription-only medicine to the public is a regulatory
+ * matter, not a preference. And publishing how much of a
+ * controlled drug is on the premises, to anybody who asks, is a
+ * shopping list for whoever is thinking of breaking in.
+ *
+ * So neither is a decision the storefront defers to a tickbox. A
+ * product that needs a prescription, or that sits on a controlled
+ * schedule, is never public — however it came to be marked
+ * published, whether by the form, an import or a hand-run UPDATE.
+ * The flag can still hide an ordinary product; it can no longer
+ * reveal one of these.
+ */
+const CATALOG_PUBLIC_SQL =
+    "p.is_active = TRUE
+     AND p.is_published = TRUE
+     AND COALESCE(p.requires_rx, FALSE) = FALSE
+     AND COALESCE(p.controlled_schedule, '') = ''";
+
 // Not a page: refuse to run when requested directly over HTTP.
 // CLI tools (migrations, cron) legitimately include this file, so the
 // guard only applies to web requests.
@@ -78,7 +108,7 @@ function catalog_shape_card(array $r): array
  */
 function catalog_list_products(array $f): array
 {
-    $where  = ["p.is_active = TRUE", "p.is_published = TRUE"];
+    $where  = [CATALOG_PUBLIC_SQL];
     $params = [];
 
     if (!empty($f['q'])) {
@@ -176,7 +206,7 @@ function catalog_get_product($idOrSlug): ?array
          LEFT JOIN categories c ON c.category_id = p.category_id
          LEFT JOIN currencies cur ON cur.currency_id = p.currency_id
          LEFT JOIN units_of_measurement u ON u.uom_id = p.uom_id
-         WHERE p.is_active = TRUE AND p.is_published = TRUE
+         WHERE " . CATALOG_PUBLIC_SQL . "
            AND " . ($byId ? "p.product_id = :key" : "LOWER(p.slug) = :key"),
         [':key' => $byId ? (int) $idOrSlug : strtolower((string) $idOrSlug)]
     );
@@ -247,7 +277,8 @@ function catalog_categories(): array
         ],
         db_all(
             "SELECT c.name, c.slug, c.icon,
-                    (SELECT COUNT(*) FROM products p WHERE p.category_id = c.category_id AND p.is_active AND p.is_published) AS product_count
+                    (SELECT COUNT(*) FROM products p
+                      WHERE p.category_id = c.category_id AND " . CATALOG_PUBLIC_SQL . ") AS product_count
              FROM categories c
              WHERE c.is_active = TRUE
              ORDER BY c.sort_order, c.name"

@@ -724,6 +724,13 @@ function staff_allowed_pages(): array
         //  refuses a non-administrator who asks for anybody else's
         //  record, so listing it here does not widen it.
         'users/edit.php',
+        //  Their own supporting documents — a sick note they
+        //  attached. documents/view.php decides for itself who may
+        //  read which folder, and for leave documents that is the
+        //  people who decide leave plus the one person it is about,
+        //  so naming it here does not widen anything. Without it the
+        //  guard refused an employee their own medical note.
+        'documents/view.php',
         //  The tab icon, and the way out.
         'company-logo.php',
         'logout.php',

@@ -54,7 +54,8 @@ require_once __DIR__ . '/../../includes/bootstrap.php';
 /*  The folders this endpoint will serve. Anything not listed here
  *  is refused even if it exists — a new upload folder has to be
  *  named deliberately rather than becoming readable by accident. */
-const PRIVATE_DOC_FOLDERS = ['payments', 'refunds', 'investments', 'advances', 'leave'];
+require_once __DIR__ . '/../../includes/private_folders.php';
+const PRIVATE_DOC_FOLDERS = PRIVATE_UPLOAD_FOLDERS;
 
 /*  And the only types that can come back. The upload path already
  *  refuses anything else, but a file that arrived some other way

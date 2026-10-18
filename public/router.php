@@ -70,7 +70,12 @@ $refuse = static function (): bool {
 };
 
 // ── Private document folders ────────────────────────────────
-foreach (['payments', 'refunds', 'investments', 'advances'] as $private) {
+//  The list is shared with documents/view.php rather than kept
+//  here as well. Keeping a second copy is how the leave folder
+//  came to be denied by nginx and served by this router.
+require_once __DIR__ . '/../includes/private_folders.php';
+
+foreach (PRIVATE_UPLOAD_FOLDERS as $private) {
     if (str_starts_with($lower, '/uploads/' . $private . '/')) {
         return $refuse();
     }

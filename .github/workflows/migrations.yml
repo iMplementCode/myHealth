@@ -182,6 +182,70 @@ jobs:
 
           echo "All invariants held."
 
+      - name: Every private upload folder is denied by every gatekeeper
+        # These files are customers' bank details, signed agreements
+        # and staff sick notes. Three different things stand in front
+        # of them — the router that the nixpacks deployment actually
+        # runs, nginx for the container build, and the endpoint that
+        # serves them — and nginx cannot read the PHP list, so its
+        # copy is written by hand.
+        #
+        # Adding the leave folder is what made this step necessary: it
+        # went into nginx and into the endpoint and not into the
+        # router, and on the live deployment a sick note was readable
+        # off the disk by anybody with the URL. Two out of three is a
+        # hole, and it is not the kind that announces itself.
+        run: |
+          set -e
+          folders=$(php -r '
+            require "includes/private_folders.php";
+            echo implode(" ", PRIVATE_UPLOAD_FOLDERS);
+          ')
+          echo "declared private: $folders"
+
+          fail=0
+          for f in $folders; do
+            grep -q "location \^~ /uploads/$f/" deploy/nginx-site.conf || {
+              echo "::error::deploy/nginx-site.conf does not deny /uploads/$f/"
+              fail=1
+            }
+          done
+
+          # And the router must refuse them too. Asked of the real
+          # code rather than by reading it, so a refactor that stops
+          # consulting the list is caught as well.
+          php -r '
+            require "includes/private_folders.php";
+            $bad = 0;
+            foreach (PRIVATE_UPLOAD_FOLDERS as $f) {
+                $_SERVER["REQUEST_URI"] = "/uploads/$f/probe.pdf";
+                ob_start();
+                $served = (static function () { return require "public/router.php"; })();
+                ob_end_clean();
+                // The router returns true when it has refused the
+                // request itself, and false to let the file be served.
+                if ($served !== true) {
+                    fwrite(STDERR, "::error::public/router.php serves /uploads/$f/\n");
+                    $bad = 1;
+                }
+            }
+            exit($bad);
+          ' || fail=1
+
+          # And none of them may be committable. Only payments/ was
+          # in .gitignore, so refund proofs, investor agreements and
+          # staff advance receipts were one `git add -A` on a server
+          # away from being in the repository.
+          for f in $folders; do
+            grep -q "^/public/uploads/$f/" .gitignore || {
+              echo "::error::.gitignore does not exclude /public/uploads/$f/"
+              fail=1
+            }
+          done
+
+          [ "$fail" = 0 ] || exit 1
+          echo "All private folders are denied by nginx and the router, and are gitignored."
+
       - name: What the database ended up with
         env:
           PGPASSWORD: ci-not-a-secret

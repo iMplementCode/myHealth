@@ -360,8 +360,25 @@ function hr_employee_save(array $in, ?int $employeeId = null): array
         return ['ok' => false, 'message' => 'The employee tables are not in this database yet.', 'employee_id' => null];
     }
 
+    /*  Only the fields the caller actually sent.
+     *
+     *  Every field used to be written on every update, so a form
+     *  that omitted one blanked it. The database caught the worst
+     *  case — staff_number is NOT NULL, so the save failed with
+     *  "could not be saved" and no hint that a hidden input was
+     *  missing — and would have said nothing at all about a
+     *  silently erased next of kin or KRA PIN.
+     *
+     *  Present and empty still clears the field, which is what
+     *  somebody emptying a box on the form means. Absent now
+     *  leaves it alone, which is what a form that never showed
+     *  the box means. Those are different intentions and were
+     *  being treated as one.                                     */
     $row = [];
     foreach (hr_employee_fields() as $field => $kind) {
+        if ($employeeId !== null && !array_key_exists($field, $in)) {
+            continue;
+        }
         $raw = trim((string) ($in[$field] ?? ''));
         $row[$field] = match ($kind) {
             'int'   => $raw === '' ? null : (int) $raw,
@@ -371,10 +388,15 @@ function hr_employee_save(array $in, ?int $employeeId = null): array
         };
     }
 
-    //  The handful that cannot be empty.
+    //  The handful that cannot be empty — checked only where the
+    //  caller offered them, since on an update an absent field
+    //  means "leave it as it is", not "set it to nothing".
     foreach (['first_name' => 'a first name', 'last_name' => 'a last name',
               'job_title' => 'a job title', 'hire_date' => 'a hire date'] as $field => $what) {
-        if (($row[$field] ?? null) === null) {
+        if (array_key_exists($field, $row) && $row[$field] === null) {
+            return ['ok' => false, 'message' => 'Every employee needs ' . $what . '.', 'employee_id' => null];
+        }
+        if ($employeeId === null && ($row[$field] ?? null) === null) {
             return ['ok' => false, 'message' => 'Every employee needs ' . $what . '.', 'employee_id' => null];
         }
     }
@@ -387,18 +409,37 @@ function hr_employee_save(array $in, ?int $employeeId = null): array
         'employment_type' => hr_employment_types(),
         'status'          => hr_statuses(),
     ] as $field => $allowed) {
+        if (!array_key_exists($field, $row)) {
+            continue;                       // not offered: unchanged
+        }
         if ($row[$field] === null) {
             $row[$field] = array_key_first($allowed);
         } elseif (!array_key_exists($row[$field], $allowed)) {
             return ['ok' => false, 'message' => 'That is not a ' . str_replace('_', ' ', $field) . ' this system knows.', 'employee_id' => null];
         }
     }
-    if ($row['sex'] !== null && !in_array($row['sex'], ['female', 'male', 'other'], true)) {
+    if (($row['sex'] ?? null) !== null && !in_array($row['sex'], ['female', 'male', 'other'], true)) {
         $row['sex'] = null;
     }
 
-    //  The two date rules the table also enforces, said in words
-    //  before the database says them in SQLSTATE.
+    /*  The date rules the table also enforces, said in words before
+     *  the database says them in SQLSTATE. On an update these have
+     *  to be judged against what the row will BE, which for an
+     *  unsent field is what it already is.                        */
+    $carried = [];
+    if ($employeeId !== null) {
+        $current = hr_employee_get($employeeId);
+        if (!$current) {
+            return ['ok' => false, 'message' => 'That employee record no longer exists.', 'employee_id' => null];
+        }
+        foreach (['status', 'end_date', 'hire_date', 'prof_registration_no', 'prof_expiry'] as $f) {
+            if (!array_key_exists($f, $row)) {
+                $row[$f] = $current[$f];
+                $carried[$f] = true;        // judged on, but not rewritten
+            }
+        }
+    }
+
     if ($row['status'] === 'exited' && $row['end_date'] === null) {
         return ['ok' => false, 'message' => 'Somebody who has left needs a leaving date.', 'employee_id' => null];
     }
@@ -417,6 +458,15 @@ function hr_employee_save(array $in, ?int $employeeId = null): array
     //  it, because their form never showed it.
     if (!hr_can_see_pay()) {
         unset($row['basic_salary'], $row['bank_name'], $row['bank_branch'], $row['bank_account_no']);
+    }
+
+    //  Drop the values borrowed above: they were read to validate
+    //  against, not to write back.
+    foreach (array_keys($carried) as $f) {
+        unset($row[$f]);
+    }
+    if (!$row) {
+        return ['ok' => true, 'message' => 'Nothing was changed.', 'employee_id' => $employeeId];
     }
 
     $pdo = db();
@@ -459,11 +509,17 @@ function hr_employee_save(array $in, ?int $employeeId = null): array
         $sets[] = 'updated_at = CURRENT_TIMESTAMP';
         db_run('UPDATE employees SET ' . implode(', ', $sets) . ' WHERE employee_id = :id', $args);
 
-        audit_log('hr.employee_updated', 'employees', $employeeId, ['name' => hr_full_name($row)]);
+        //  $row is only what was sent, so the name for the log
+        //  comes from the record when the form did not carry it.
+        $who = hr_full_name([
+            'first_name' => $row['first_name'] ?? ($current['first_name'] ?? ''),
+            'last_name'  => $row['last_name']  ?? ($current['last_name']  ?? ''),
+        ]);
+        audit_log('hr.employee_updated', 'employees', $employeeId, ['name' => $who]);
         if (!$owns) {
             $pdo->commit();
         }
-        return ['ok' => true, 'message' => hr_full_name($row) . ' has been saved.', 'employee_id' => $employeeId];
+        return ['ok' => true, 'message' => ($who !== '' ? $who : 'The employee') . ' has been saved.', 'employee_id' => $employeeId];
     } catch (Throwable $e) {
         if (!$owns && $pdo->inTransaction()) {
             $pdo->rollBack();

@@ -218,14 +218,118 @@ function leave_balance(int $employeeId, int $leaveTypeId, ?int $year = null): ar
     ];
 }
 
-/** Every type with this employee's balance against it. */
+/**
+ * Every type with this employee's balance against it.
+ *
+ * Three queries, not three per type. It used to call
+ * leave_balance() in a loop, which is three queries each — and
+ * one of those three re-read the leave type row the loop was
+ * already holding. Six types made eighteen round trips to draw
+ * five tiles on one page.
+ *
+ * Measured on the self-service page: fifteen of its queries were
+ * this function. Over a unix socket that is a millisecond or two;
+ * across a network to a separate database container, which is
+ * how this is deployed, it is the difference between a page and
+ * a pause.
+ *
+ * leave_balance() is kept for the single-type question — what is
+ * left of annual leave, asked once when a request is submitted —
+ * where three queries is the right number.
+ */
 function leave_balances_for(int $employeeId, ?int $year = null): array
 {
-    $out = [];
-    foreach (leave_types_all() as $type) {
-        $out[] = $type + ['balance' => leave_balance($employeeId, (int) $type['leave_type_id'], $year)];
+    $year ??= (int) date('Y');
+
+    $types = leave_types_all();
+    if (!$types) {
+        return [];
     }
+
+    //  Every override this person has, in one go.
+    $overrides = [];
+    foreach (db_all(
+        'SELECT leave_type_id, days_entitled, days_carried_over, adjustment
+           FROM leave_entitlements
+          WHERE employee_id = :e AND leave_year = :y',
+        [':e' => $employeeId, ':y' => $year]
+    ) as $row) {
+        $overrides[(int) $row['leave_type_id']] = $row;
+    }
+
+    //  And everything taken or pending, grouped rather than asked
+    //  for one type at a time.
+    $used = [];
+    foreach (db_all(
+        "SELECT leave_type_id,
+                COALESCE(SUM(days_requested) FILTER (WHERE status = 'approved'), 0) AS taken,
+                COALESCE(SUM(days_requested) FILTER (WHERE status IN ('submitted','dept_approved')), 0) AS pending
+           FROM leave_requests
+          WHERE employee_id = :e AND EXTRACT(YEAR FROM start_date) = :y
+          GROUP BY leave_type_id",
+        [':e' => $employeeId, ':y' => $year]
+    ) as $row) {
+        $used[(int) $row['leave_type_id']] = $row;
+    }
+
+    $out = [];
+    foreach ($types as $type) {
+        $id  = (int) $type['leave_type_id'];
+        $ent = $overrides[$id] ?? null;
+        $u   = $used[$id] ?? ['taken' => 0, 'pending' => 0];
+
+        $entitled = $ent && $ent['days_entitled'] !== null
+            ? (float) $ent['days_entitled']
+            : ($type['days_per_year'] === null ? null : (float) $type['days_per_year']);
+
+        $carried    = $ent ? (float) $ent['days_carried_over'] : 0.0;
+        $adjustment = $ent ? (float) $ent['adjustment'] : 0.0;
+        $taken      = (float) $u['taken'];
+        $pending    = (float) $u['pending'];
+
+        $out[] = $type + ['balance' => [
+            'entitled'   => $entitled,
+            'carried'    => $carried,
+            'adjustment' => $adjustment,
+            'taken'      => $taken,
+            'pending'    => $pending,
+            'available'  => $entitled === null
+                ? null
+                : round($entitled + $carried + $adjustment - $taken - $pending, 1),
+            'uncapped'   => $entitled === null,
+        ]];
+    }
+
     return $out;
+}
+
+/**
+ * Whole calendar months somebody has been employed.
+ *
+ * age() and not a subtraction. Taking one date from another in
+ * PostgreSQL yields an integer number of days, not an interval,
+ * so EXTRACT had nothing to extract from and the eligibility
+ * check raised an SQL error instead of answering. age() gives a
+ * real interval, and years*12 + months is whole calendar months —
+ * which is what the statute counts, rather than a thirty-day
+ * approximation of it.
+ *
+ * Cached by hire date, because eligibility is asked once per
+ * leave type and the answer cannot differ between them. It was
+ * a query per type for every type with a qualifying period.
+ */
+function leave_months_of_service(string $hireDate): int
+{
+    static $seen = [];
+
+    if (!array_key_exists($hireDate, $seen)) {
+        $seen[$hireDate] = (int) db_value(
+            "SELECT EXTRACT(YEAR FROM age(CURRENT_DATE, CAST(:h AS date))) * 12
+                  + EXTRACT(MONTH FROM age(CURRENT_DATE, CAST(:h AS date)))",
+            [':h' => $hireDate]
+        );
+    }
+    return $seen[$hireDate];
 }
 
 /**
@@ -248,19 +352,7 @@ function leave_eligibility(array $employee, array $type): ?string
 
     $months = (int) ($type['min_service_months'] ?? 0);
     if ($months > 0) {
-        //  age() and not a subtraction. Taking one date from
-        //  another in PostgreSQL yields an integer number of days,
-        //  not an interval, so EXTRACT had nothing to extract from
-        //  and the whole eligibility check raised an SQL error
-        //  instead of answering. age() gives a real interval, and
-        //  years*12 + months is whole calendar months of service —
-        //  which is what the statute counts, rather than a
-        //  thirty-day approximation of it.
-        $served = (int) db_value(
-            "SELECT EXTRACT(YEAR FROM age(CURRENT_DATE, CAST(:h AS date))) * 12
-                  + EXTRACT(MONTH FROM age(CURRENT_DATE, CAST(:h AS date)))",
-            [':h' => $employee['hire_date']]
-        );
+        $served = leave_months_of_service((string) $employee['hire_date']);
         if ($served < $months) {
             return $type['name'] . ' opens after ' . $months . ' months of service. '
                  . 'This record shows ' . max(0, $served) . '.';
@@ -373,7 +465,22 @@ function leave_cover_by_day(string $from, string $to, ?int $alsoAway = null): ar
  */
 function leave_cover_warning(string $from, string $to, ?int $alsoAway = null): ?string
 {
-    $days = leave_cover_by_day($from, $to, $alsoAway);
+    return leave_cover_warning_for(leave_cover_by_day($from, $to, $alsoAway));
+}
+
+/**
+ * The same sentence, from rows already fetched.
+ *
+ * Split out because the approval screen draws the day-by-day
+ * table AND the warning above it, and calling the wrapper for
+ * the second of those ran the whole generate_series query a
+ * second time for the identical dates. The page now fetches once
+ * and asks both questions of the answer.
+ *
+ * @param array $days rows from leave_cover_by_day()
+ */
+function leave_cover_warning_for(array $days): ?string
+{
     if (!$days) {
         return null;
     }
@@ -670,6 +777,34 @@ function leave_submit(array $in): array
     if (strtotime($to) < strtotime($from)) {
         return $fail('The end date is before the start date.');
     }
+
+    /*  Somewhere near now. Leave is charged to the year its start
+     *  date falls in, so a request dated 2019 draws down a 2019
+     *  balance nobody is watching, and one dated 2043 sits in the
+     *  overlap check for ever blocking dates nobody has thought
+     *  about yet. Neither is an attack worth much; both are
+     *  nonsense in a table that people later run reports off.
+     *
+     *  A year back covers applying late for leave already taken.
+     *  Two years forward covers any real plan.                   */
+    if (strtotime($from) < strtotime('-1 year')) {
+        return $fail('That start date is more than a year ago. Ask an administrator to record older leave.');
+    }
+    if (strtotime($from) > strtotime('+2 years')) {
+        return $fail('That start date is more than two years away.');
+    }
+
+    /*  One person cannot flood the approver's inbox.
+     *
+     *  Every submission emails whoever decides it, and leave
+     *  without pay is uncapped by design — there is no annual
+     *  allowance to run out of — so the only thing bounding a run
+     *  of requests was the overlap trigger, which just means they
+     *  have to be on different days. That is years of them.
+     *
+     *  Keyed on the employee and not the address, because this is
+     *  about one person's requests rather than one network's.    */
+    rate_limit_or_stop('leave:submit:' . $employeeId, 12, 3600, 'leave requests');
 
     $employee = hr_employee_get($employeeId);
     if (!$employee) {

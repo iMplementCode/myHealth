@@ -28,7 +28,23 @@
 # them on first use instead, so they belong to the process that has
 # to write to them.
 /public/uploads/company/
+
+# ── Private documents: never in version control ──────────
+# Customers' bank slips, refund proofs, signed investor
+# agreements, staff advance receipts and staff sick notes.
+# Only payments/ was listed here, so the other three were one
+# `git add -A` on a server away from being committed — and the
+# leave folder, which holds medical information about staff,
+# was added later and would have been the fifth.
+#
+# This list is checked against includes/private_folders.php by
+# CI, so a folder added there and forgotten here fails the build
+# rather than ending up in a push.
 /public/uploads/payments/
+/public/uploads/refunds/
+/public/uploads/investments/
+/public/uploads/advances/
+/public/uploads/leave/
 
 # ── OS / editor noise ────────────────────────────────────
 .DS_Store

@@ -85,9 +85,12 @@ $awayToday  = leave_away_on(date('Y-m-d'));
 $departments = hr_departments();
 
 //  The cover picture for the request being looked at.
+//  Fetched once. The warning is read off the same rows the table
+//  below is drawn from, rather than running the query again for
+//  the identical dates.
 $coverDays = $one ? leave_cover_by_day((string) $one['start_date'], (string) $one['end_date']) : [];
 $coverNow  = $one && in_array($one['status'], ['submitted', 'dept_approved'], true)
-    ? leave_cover_warning((string) $one['start_date'], (string) $one['end_date'])
+    ? leave_cover_warning_for($coverDays)
     : null;
 
 $pageTitle    = 'Leave';
