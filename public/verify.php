@@ -21,7 +21,7 @@ require_once __DIR__ . '/../includes/bootstrap.php';
 
 // Already through? Nothing to do here.
 if (auth_check()) {
-    redirect('dashboard/index.php');
+    redirect(default_landing_page());
 }
 
 /*  Two-factor switched off while somebody was part way through it.
@@ -79,7 +79,7 @@ if (is_post()) {
     } else {
         $result = two_factor_verify((string) ($_POST['code'] ?? ''));
         if ($result['success']) {
-            $target = $_SESSION['intended'] ?? 'dashboard/index.php';
+            $target = $_SESSION['intended'] ?? default_landing_page();
             unset($_SESSION['intended']);
             flash('success', $result['message']);
             redirect(login_safe_target($target));

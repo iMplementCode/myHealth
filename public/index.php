@@ -14,4 +14,4 @@
 define('APP_PUBLIC_PAGE', true);
 require_once __DIR__ . '/../includes/bootstrap.php';
 
-redirect(auth_check() ? 'dashboard/index.php' : 'login.php');
+redirect(auth_check() ? default_landing_page() : 'login.php');

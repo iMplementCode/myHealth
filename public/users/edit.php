@@ -31,7 +31,7 @@ $user = db_one(
 if (!$user) {
     http_response_code(404);
     flash('error', 'That user does not exist.');
-    redirect(is_admin() ? 'users/index.php' : 'dashboard/index.php');
+    redirect(is_admin() ? 'users/index.php' : default_landing_page());
 }
 
 $roles  = db_all("SELECT role_id, name FROM roles ORDER BY name");
@@ -191,7 +191,7 @@ if (is_post()) {
             }
 
             flash('success', 'Changes saved.' . ($notes ? ' ' . ucfirst(implode('; ', $notes)) . '.' : ''));
-            redirect(is_admin() ? 'users/index.php' : 'dashboard/index.php');
+            redirect(is_admin() ? 'users/index.php' : default_landing_page());
         } catch (PDOException $ex) {
             error_log('[USERS] update failed: ' . $ex->getMessage());
             // The unique indexes are the last word; say which one
@@ -328,7 +328,7 @@ $err = fn(string $f) => isset($errors[$f]) ? 'is-error' : '';
     <?php endif; ?>
 
     <div class="form-actions">
-        <a href="<?= e(url(is_admin() ? 'users/index.php' : 'dashboard/index.php')) ?>" class="btn btn-ghost">Cancel</a>
+        <a href="<?= e(url(is_admin() ? 'users/index.php' : default_landing_page())) ?>" class="btn btn-ghost">Cancel</a>
         <button type="submit" class="btn btn-primary">Save changes</button>
     </div>
 </form>

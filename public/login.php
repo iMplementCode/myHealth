@@ -16,7 +16,7 @@ require_once __DIR__ . '/../includes/bootstrap.php';
 
 // Already signed in? Go straight to the dashboard.
 if (auth_check()) {
-    redirect('dashboard/index.php');
+    redirect(default_landing_page());
 }
 
 $errors = [];
@@ -50,7 +50,7 @@ if (is_post()) {
         }
 
         if ($result['success']) {
-            $target = $_SESSION['intended'] ?? 'dashboard/index.php';
+            $target = $_SESSION['intended'] ?? default_landing_page();
             unset($_SESSION['intended']);
             $target = login_safe_target($target);
             flash('success', 'Welcome back!');

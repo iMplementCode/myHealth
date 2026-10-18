@@ -303,6 +303,18 @@ define('ROLE_ADMIN', 'Administrator');
 define('ROLE_MANAGER', 'Manager');
 define('ROLE_SALES', 'Salesperson');
 
+//  The first role that is meant to see LESS than a salesperson.
+//  Somebody who works here, applies for leave and has no business
+//  with the till, the stock, the patients or the cash book.
+//
+//  Most pages in this application carry no role guard, which was
+//  correct while every role was trusted with the shop floor. This
+//  one is not, so it does not rely on pages remembering to say so:
+//  staff_area_guard() in includes/auth.php allows an explicit list
+//  of pages and refuses the rest, which means a page added next
+//  year is closed to this role without anybody being reminded.
+define('ROLE_STAFF', 'Staff');
+
 // ─── Uploads ─────────────────────────────────────────────────
 // Served, so it lives under the document root — but the .htaccess
 // beside it turns PHP off, because an uploaded image that happens

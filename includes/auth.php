@@ -684,6 +684,106 @@ function require_login(): void
 }
 
 /**
+ * The page a role lands on.
+ *
+ * Everything here used to begin at the dashboard, which was safe
+ * while every role could read it. The Staff role cannot — that
+ * page shows the day's takings — so sending them there after a
+ * correct password would answer 403 and look like a broken
+ * account.
+ *
+ * Used by sign-in, by the two-step code page, by the root
+ * redirect and as login_safe_target()'s fallback, so there is one
+ * answer to "where does this person start".
+ */
+function default_landing_page(): string
+{
+    return current_role() === ROLE_STAFF ? 'hr/my_leave.php' : 'dashboard/index.php';
+}
+
+/**
+ * The pages the Staff role may reach.
+ *
+ * An allowlist, and that direction is the entire point. This
+ * application has around a hundred pages and most carry no role
+ * guard at all, because until now every role was trusted with the
+ * shop floor. Enumerating what to refuse would mean being right
+ * about a hundred pages today and right again about every page
+ * added afterwards.
+ *
+ * So: a short list, plus whatever declares itself public. A new
+ * page is closed to this role until somebody puts it here on
+ * purpose.
+ */
+function staff_allowed_pages(): array
+{
+    return [
+        //  Their own leave: balances, applying, their history.
+        'hr/my_leave.php',
+        //  Their own name, email and password. That page already
+        //  refuses a non-administrator who asks for anybody else's
+        //  record, so listing it here does not widen it.
+        'users/edit.php',
+        //  The tab icon, and the way out.
+        'company-logo.php',
+        'logout.php',
+    ];
+}
+
+/**
+ * Refuse a Staff user any page outside that list.
+ *
+ * Called from the bootstrap once the session exists and before the
+ * page runs. Pages that declare themselves public never reach it,
+ * which is correct — the sign-in form has to work.
+ *
+ * The path comes from the script actually executing, resolved on
+ * disk and checked to be under the document root, rather than from
+ * REQUEST_URI — which is whatever the caller sent, and so is
+ * exactly the wrong thing to make an access decision from.
+ */
+function staff_area_guard(): void
+{
+    if (current_role() !== ROLE_STAFF) {
+        return;
+    }
+
+    $script = realpath((string) ($_SERVER['SCRIPT_FILENAME'] ?? ''));
+    $root   = realpath(PUBLIC_PATH);
+
+    //  Cannot tell which page this is, so refuse. A guard that
+    //  fails open is not a guard.
+    if ($script === false || $root === false
+        || strncmp($script, $root . DIRECTORY_SEPARATOR, strlen($root) + 1) !== 0) {
+        staff_area_refuse('');
+    }
+
+    $page = str_replace('\\', '/', substr((string) $script, strlen((string) $root) + 1));
+    if (in_array($page, staff_allowed_pages(), true)) {
+        return;
+    }
+
+    staff_area_refuse($page);
+}
+
+/** The refusal itself, so every way out of the guard matches. */
+function staff_area_refuse(string $page): void
+{
+    if ($page !== '') {
+        error_log('[SECURITY] Staff role refused ' . $page);
+    }
+    if (wants_json()) {
+        json_response([
+            'success' => false,
+            'message' => 'Your account does not have access to that part of the system.',
+        ], 403);
+    }
+    http_response_code(403);
+    include BASE_PATH . '/includes/403.php';
+    exit;
+}
+
+/**
  * Where it is safe to send somebody once they are signed in.
  *
  * "Return to where you were" is the one place an application
@@ -702,7 +802,7 @@ function require_login(): void
  */
 function login_safe_target(string $target): string
 {
-    $fallback = 'dashboard/index.php';
+    $fallback = default_landing_page();
 
     //  A newline would let the rest of the Location header, or
     //  further headers, be written by whoever chose the target.

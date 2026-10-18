@@ -52,6 +52,8 @@ require_once __DIR__ . '/mailer.php';
 require_once __DIR__ . '/two_factor.php';
 require_once __DIR__ . '/lookup.php';
 require_once __DIR__ . '/notifications.php';
+require_once __DIR__ . '/hr.php';
+require_once __DIR__ . '/leave.php';
 
 /*
  * The order below is the order it has to be in.
@@ -102,4 +104,18 @@ security_gc_maybe();
  */
 if (!defined('APP_PUBLIC_PAGE')) {
     require_login();
+
+    /*  And then a second, narrower deny for the Staff role.
+     *
+     *  require_login() asks whether somebody is signed in. That was
+     *  the only question worth asking while every role could be
+     *  trusted with the shop floor. Staff cannot: the role exists so
+     *  that a storekeeper can apply for leave without thereby being
+     *  given the till, the patient records and the cash book.
+     *
+     *  Most pages here carry no role guard, so this is enforced in
+     *  one place rather than by editing a hundred files and
+     *  remembering to edit the hundred and first. See
+     *  staff_allowed_pages(). */
+    staff_area_guard();
 }
