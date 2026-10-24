@@ -1,5 +1,13 @@
 # Hostinger VPS
 
+> **Before anything else, if this server is already running:** PHP
+> itself had two unauthenticated remote-code-execution flaws patched
+> on 21 October 2026 (PHP2Shell, CVE-2026-109618 and
+> CVE-2026-109619). They were being exploited before the patch was
+> announced, and no setting in this application affects them.
+> Run `php deploy/php-version-check.php` and see
+> [php2shell.md](php2shell.md).
+
 A VPS is a bare Ubuntu machine with root SSH. Nothing is installed
 and nothing is decided for you, which is the difficulty and also the
 point: it is the first kind of hosting where the web server can be
@@ -383,6 +391,13 @@ rather than a backup — `deploy/restore.sh` exists to be rehearsed.
 ---
 
 ## Updating later
+
+**PHP security updates are not optional and are not covered by
+`git pull`.** See [php2shell.md](php2shell.md) for the October 2026
+flaws and for how to tell which PHP is actually serving the site —
+on a Dokploy deployment it is the one inside the container, and
+`apt upgrade` on the host does not touch it.
+
 
 ```bash
 cd /var/www/erp

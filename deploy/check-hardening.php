@@ -37,11 +37,87 @@ require_once __DIR__ . '/../includes/database.php';
 
 $findings = [];
 
+/*  PHP2Shell is checked first because it outranks everything else
+ *  in this file. The rest of these findings are about an attacker
+ *  who has to get through the application; this one is about an
+ *  attacker who does not have to reach it at all. */
+require_once __DIR__ . '/php-version-check.php';
+
 /** Record one finding. Level: fail, warn, ok. */
 function finding(string $level, string $title, string $detail, string $fix = ''): void
 {
     global $findings;
     $findings[] = ['level' => $level, 'title' => $title, 'detail' => $detail, 'fix' => $fix];
+}
+
+/* ── PHP itself ─────────────────────────────────────────────── */
+
+$v = php2shell_verdict(PHP_VERSION);
+
+$distro = php2shell_distro_package();
+
+if ($v['state'] === 'patched') {
+    finding('ok', 'PHP is patched against PHP2Shell', PHP_VERSION . ' — ' . $v['detail']);
+} elseif ($distro !== null) {
+    /*  A distribution package cannot be judged on the upstream
+     *  number: Debian, Ubuntu and Red Hat backport the fix and leave
+     *  the version alone. Saying "vulnerable" here would be a guess,
+     *  and a check that guesses wrong once stops being read. */
+    finding(
+        'warn',
+        'PHP may or may not be patched — this is a distribution package',
+        $v['detail'] . ' The running package is ' . $distro['package'] . ' '
+        . $distro['version'] . '. Debian, Ubuntu and Red Hat backport security fixes '
+        . 'without changing the upstream version number, so 8.3.6 here could be either, '
+        . 'and nothing visible from inside PHP tells them apart. This is NOT a clean bill '
+        . 'of health — it is the check saying it cannot answer.',
+        ($distro['manager'] === 'dpkg'
+            ? 'apt-get update && apt-get install --only-upgrade ' . $distro['package']
+            : 'dnf update ' . $distro['package'])
+        . ', restart PHP, then check your vendor\'s notice for CVE-2026-109618. If they '
+        . 'have not shipped a fix, treat this as vulnerable and see docs/php2shell.md.'
+    );
+} else {
+    finding(
+        'fail',
+        'PHP is vulnerable to PHP2Shell (CVE-2026-109618 / CVE-2026-109619)',
+        $v['detail'] . ' These two flaws let somebody run commands on this server '
+        . 'WITHOUT SIGNING IN. They do not go through a login, a session or a page — one of '
+        . 'them runs inside PHP\'s own upload handling, before any of this application\'s '
+        . 'code. Nothing in the application, and nothing else in this report, stands between '
+        . 'an attacker and them. They were being exploited before the patch was published.',
+        'Upgrade PHP to ' . ($v['needed'] ?? '8.3.36 or newer on a supported branch')
+        . ' or above and restart it. This is the only complete fix — PHP has said there is '
+        . 'no configuration that closes both. See docs/php2shell.md for the steps on a '
+        . 'Hostinger VPS, including how to tell whether the version that matters is the '
+        . 'one on the host or the one inside the container.'
+    );
+}
+
+$uploadProgress = (string) ini_get('session.upload_progress.enabled');
+$uploadOn = $uploadProgress !== '' && $uploadProgress !== '0';
+
+if ($uploadOn && $v['state'] !== 'patched') {
+    finding(
+        'fail',
+        'session.upload_progress is on, and PHP is not known to be patched',
+        'This is the path CVE-2026-109619 uses. Switching it off does not fix the other '
+        . 'flaw and is not a substitute for upgrading, but it closes one of the two doors '
+        . 'in the time it takes to arrange the upgrade. Nothing in this application uses '
+        . 'the feature.',
+        'session.upload_progress.enabled = 0 in php.ini or the php-fpm pool, then restart '
+        . 'PHP. Then upgrade anyway.'
+    );
+} elseif ($uploadOn) {
+    finding(
+        'warn',
+        'session.upload_progress is on',
+        'PHP is patched, so this is no longer urgent. The feature is still unused by this '
+        . 'application and is still a moving part that does not need to be moving.',
+        'session.upload_progress.enabled = 0 in php.ini or the php-fpm pool.'
+    );
+} else {
+    finding('ok', 'session.upload_progress is off', '');
 }
 
 /* ── Reverse proxy ──────────────────────────────────────────── */

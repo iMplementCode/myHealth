@@ -52,6 +52,14 @@ RUN { \
 #  Production php.ini, stated rather than inherited. display_errors
 #  off because a stack trace on a page names paths and sometimes
 #  query text; the log still gets everything.
+#
+#  session.upload_progress.enabled=0 is the PHP2Shell mitigation
+#  (CVE-2026-109619). PHP's upload-progress feature runs inside its
+#  own request handling, before any of this application's code, so
+#  nothing written in the application reaches it. Nothing here uses
+#  it either. Off closes one of the two paths; the other,
+#  CVE-2026-109618, is closed only by running a patched PHP — which
+#  the version check further down refuses to build without.
 RUN { \
       echo 'display_errors=Off'; \
       echo 'display_startup_errors=Off'; \
@@ -63,7 +71,22 @@ RUN { \
       echo 'upload_max_filesize=5M'; \
       echo 'max_execution_time=30'; \
       echo 'session.use_strict_mode=1'; \
+      echo 'session.upload_progress.enabled=0'; \
     } > /usr/local/etc/php/conf.d/zz-production.ini
+
+#  Refuse to build on a PHP that still has PHP2Shell.
+#
+#  The base image above floats on the 8.3 branch, so a rebuild
+#  normally picks the fix up by itself — but "normally" is doing
+#  a lot of work in a sentence about an unauthenticated remote
+#  code execution that was being exploited before it was
+#  announced. A stale layer cache or a pinned mirror can hand
+#  back an old image without anybody noticing, and the result
+#  would look like a successful deploy.
+#
+#  This makes that case a failed build instead.
+COPY deploy/php-version-check.php /tmp/php-version-check.php
+RUN php /tmp/php-version-check.php && rm /tmp/php-version-check.php
 
 #  The pool. pm=dynamic with a real ceiling: 24 workers at the
 #  ~30MB this application uses per request is comfortable inside
