@@ -190,7 +190,7 @@ function auth_attempt(string $identifier, string $password, bool $remember = fal
         // same time to answer. Otherwise the response time alone
         // tells an attacker which email addresses are real.
         if (!$user) {
-            password_verify($password, '$2y$12$usesomesillystringfoeswvUDcx7kOOxLhCFRThJEyd3PpZ4KTNGq');
+            password_verify($password, auth_dummy_hash());
         }
         auth_register_failure($identifier);
         return $genericFail;
@@ -259,6 +259,55 @@ function auth_attempt(string $identifier, string $password, bool $remember = fal
     }
 
     return ['success' => true, 'message' => 'Signed in successfully.'];
+}
+
+/**
+ * A hash to check a password against when the account does not exist.
+ *
+ * The point of it is timing: a sign-in that finds no account must
+ * take as long as one that finds an account and a wrong password, or
+ * the clock tells an attacker which addresses are real. That is why
+ * the check above verifies against something rather than returning
+ * early.
+ *
+ * It only works if the dummy costs the same as a real hash, and the
+ * value that lived here did not. It was the example string from the
+ * PHP manual — which is 61 characters where bcrypt is 60, so
+ * password_get_info() called it "unknown" and it could never match
+ * anything. Worse, it declared cost 12 while this system issues cost
+ * 10, and crypt() does the work before it fails. Measured: 62ms
+ * against a real hash, 256ms against the dummy. Over HTTP that came
+ * out as 0.08s for a real account and 0.27s for one that did not
+ * exist — the enumeration oracle the dummy was added to remove, four
+ * times larger than it would have been with no dummy at all, and
+ * pointing the other way.
+ *
+ * So: a real bcrypt hash, of a random string nobody holds, at
+ * whatever cost this installation actually issues. If the default
+ * ever moves — a PHP upgrade, or a configured cost — the stored
+ * constant stops matching and one is computed to fit, with a line in
+ * the log saying the constant below should be refreshed.
+ */
+function auth_dummy_hash(): string
+{
+    static $dummy = null;
+    if ($dummy !== null) {
+        return $dummy;
+    }
+
+    //  bcrypt, cost 10, of 64 random hex characters. Nothing can be
+    //  signed in with it; it exists only to burn the same time.
+    $stored = '$2y$10$kkPTuusnzE9XsMtQgH80TOzF3FzZDzO2SxyGzwzssUzTGly5QWhFe';
+
+    if (!password_needs_rehash($stored, PASSWORD_DEFAULT)) {
+        return $dummy = $stored;
+    }
+
+    error_log('[AUTH] the dummy password hash no longer matches PASSWORD_DEFAULT, so it is '
+            . 'being recomputed on every process start. Regenerate the constant in '
+            . 'auth_dummy_hash() with: php -r \'echo password_hash(bin2hex(random_bytes(32)), PASSWORD_DEFAULT);\'');
+
+    return $dummy = password_hash(bin2hex(random_bytes(32)), PASSWORD_DEFAULT);
 }
 
 /** Populate the session for an authenticated user and rotate the id. */

@@ -27,6 +27,25 @@
 
 declare(strict_types=1);
 
+/*  Do not announce the PHP version.
+ *
+ *  PHP adds "X-Powered-By: PHP/8.3.6" by default, and the three
+ *  files that answer without loading the bootstrap — this one and
+ *  the two API endpoints — never reach security_headers(), which
+ *  strips it for every other page. So the endpoints most likely to
+ *  be probed by a stranger were the ones naming the version.
+ *
+ *  That is worth a line of its own while PHP2Shell is being
+ *  scanned for: a version number tells somebody whether the
+ *  pre-auth remote code execution they already have is worth
+ *  pointing here. It is not a fix — see docs/php2shell.md for the
+ *  fix — but there is no reason to answer the question.
+ *
+ *  expose_php=Off in php.ini does the same thing and is set in
+ *  deploy/Dockerfile. This does not depend on that, because the
+ *  deployment nixpacks.toml actually starts does not use it.      */
+header_remove('X-Powered-By');
+
 // API context: no session/redirect chrome — bootstrap pieces directly.
 // Entered through the API front door; the guard in includes/
 // only exists to stop those files being requested directly.

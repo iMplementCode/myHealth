@@ -68,6 +68,47 @@ jobs:
       - name: Composer
         run: composer install --no-interaction --no-progress --prefer-dist
 
+      - name: Known vulnerabilities in dependencies
+        # The October 2026 PHP flaws were in PHP itself, which this
+        # cannot see. What it does see is the three packages this
+        # application ships — dompdf, PHPMailer, phpdotenv — any of
+        # which could be the next advisory, and none of which anybody
+        # would notice going stale without being told.
+        run: composer audit --no-interaction
+
+      - name: The PHP2Shell check still gives the right answers
+        # Asserting the logic, not the runner's own PHP. A CI runner
+        # is ephemeral and serves no traffic, so failing a build over
+        # its version would be noise — but a version check that has
+        # quietly stopped working is worth catching, because the only
+        # time anybody finds out otherwise is the day they trust it.
+        run: |
+          php -r '
+            require "deploy/php-version-check.php";
+            $cases = [
+                ["8.3.36", "patched"], ["8.3.35", "vulnerable"], ["8.3.6", "vulnerable"],
+                ["8.2.35", "patched"], ["8.2.34", "vulnerable"],
+                ["8.4.27", "patched"], ["8.4.26", "vulnerable"],
+                ["8.5.12", "patched"], ["8.5.11", "vulnerable"],
+                ["8.6.0",  "patched"],          // newer than we know about
+                ["8.1.99", "unsupported"],      // end of life before disclosure
+                ["7.4.33", "unsupported"],
+                ["8.3.6-0ubuntu0.24.04.11", "vulnerable"],   // distro suffix ignored
+                ["nonsense", "unknown"],
+            ];
+            $bad = 0;
+            foreach ($cases as [$v, $want]) {
+                $got = php2shell_verdict($v)["state"];
+                if ($got !== $want) {
+                    fwrite(STDERR, "::error::php2shell_verdict($v) said $got, expected $want\n");
+                    $bad = 1;
+                }
+            }
+            exit($bad);
+          '
+          echo "Verdict logic is intact. The runner is on $(php -r 'echo PHP_VERSION;'):"
+          php deploy/php-version-check.php || echo "::warning::This CI runner is on a PHP that still has PHP2Shell. That does not affect the build, but check what your servers are running."
+
       - name: Syntax-check every PHP file
         # Cheap, and catches the parse error that would otherwise
         # take the site down on deploy rather than here.
