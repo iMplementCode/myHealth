@@ -15,6 +15,26 @@ door. Every defence in this repository sits downstream of it.
 So the only fix is the PHP version. This page is how to get there and
 how to prove you did.
 
+### Affected versions
+
+AWS's security bulletin states the ranges as:
+
+| Branch | Affected | Fixed in |
+|---|---|---|
+| 8.5 | 8.5.0 – 8.5.11 | **8.5.12** |
+| 8.4 | 8.4.0 – 8.4.26 | **8.4.27** |
+| 8.3 | 8.3.0 – 8.3.35 | **8.3.36** |
+| 8.2 | — (not listed in that bulletin) | **8.2.35** |
+
+Treat the ranges as indicative rather than final. Published accounts
+disagree about how far back this reaches — some say 5.4 onward, one
+lists everything before 7.4 — and php.net's own advisory is the only
+thing worth settling it with. What nobody disagrees about is the
+fixed versions, which is the number you actually need.
+
+Both are use-after-free bugs (CWE-416), per the Canadian Centre for
+Cyber Security.
+
 ---
 
 ## First: which PHP is actually serving the site?
@@ -161,9 +181,15 @@ sudo systemctl restart php-fpm
 CloudLinux shipped patched `alt-php` and `ea-php` packages; if your
 VPS template uses those, update through their channel.
 
-**PHP 8.1 or older:** php.net will not fix it — those branches were
-already end of life when this was disclosed. You must move to a
-supported branch, or confirm your distribution has backported the fix.
+**PHP 8.1 or older:** do not assume either way — check php.net
+before you act. Those branches were end of life when this was
+disclosed, and the regular releases above do not cover them. But at
+least one vendor write-up (Fastly) reports that the PHP security team
+provided **source backports for 7.4, 8.0 and 8.1**, and other write-ups
+say the opposite. Sources genuinely disagree, so this page will not
+guess on your behalf: read the php.net advisory, and failing that your
+distribution's. If no fix exists for your branch, moving to a
+supported one is the answer.
 
 ---
 
@@ -213,3 +239,6 @@ password.
 * <https://ubuntu.com/security/CVE-2026-109618> — Ubuntu's status per release
 * <https://www.helpnetsecurity.com/2026/10/21/php2shell-php-vulnerabilities-patched-cve-2026-109618-cve-2026-109619/>
 * <https://watchtowr.com/intelligence/php-cve-2026-109618-faq/> — exploitation in the wild
+* <https://aws.amazon.com/security/security-bulletins/2026-143-aws/> — the version ranges above
+* <https://cyber.gc.ca/en/alerts-advisories/al26-026-critical-vulnerabilities-impacting-php-cve-2026-109618-cve-2026-109619> — Canadian Centre for Cyber Security
+* <https://www.fastly.com/blog/critical-rce-vulnerabilities-discovered-core-php-cve-2026-109618-cve-2026-109619> — reports source backports for 7.4, 8.0 and 8.1

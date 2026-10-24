@@ -133,10 +133,12 @@ function php2shell_verdict(string $version): array
                     'detail' => $short . ' is newer than every branch this check knows about.'];
         }
         return ['state' => 'unsupported', 'needed' => null,
-                'detail' => 'PHP ' . $branch . ' reached end of life before these flaws were '
-                          . 'disclosed, so php.net will not fix it. Either move to a supported '
-                          . 'branch, or confirm with your distribution that it has backported '
-                          . 'the fix into the package you are running.'];
+                'detail' => 'PHP ' . $branch . ' was end of life when these flaws were '
+                          . 'disclosed, so the regular releases do not cover it. Published '
+                          . 'accounts disagree about whether a source backport was provided '
+                          . 'for the older branches, so check php.net and your distribution '
+                          . 'rather than assuming either way. If there is no fix for this '
+                          . 'branch, moving to a supported one is the answer.'];
     }
 
     $needed = $fixed[$branch];
