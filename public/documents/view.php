@@ -57,6 +57,11 @@ require_once __DIR__ . '/../../includes/bootstrap.php';
 require_once __DIR__ . '/../../includes/private_folders.php';
 const PRIVATE_DOC_FOLDERS = PRIVATE_UPLOAD_FOLDERS;
 
+/*  private_document_ref() lives here, and uploads.php is not part
+ *  of the bootstrap — the pages that render these links pull it in
+ *  themselves, so this endpoint has to as well. */
+require_once __DIR__ . '/../../includes/uploads.php';
+
 /*  And the only types that can come back. The upload path already
  *  refuses anything else, but a file that arrived some other way
  *  must not be served as, say, text/html in our own origin. */
@@ -105,12 +110,36 @@ if (!in_array($folder, PRIVATE_DOC_FOLDERS, true)) {
 if ($folder === 'leave') {
     if (!is_admin() && !user_has_role(ROLE_MANAGER)) {
         $mine  = function_exists('hr_current_employee') ? hr_current_employee() : null;
-        $owned = $mine && db_value(
-            'SELECT 1 FROM leave_requests
-              WHERE employee_id = :e AND document_url LIKE :f
-              LIMIT 1',
-            [':e' => (int) $mine['employee_id'], ':f' => '%/leave/' . $name]
-        );
+        $owned = false;
+
+        if ($mine) {
+            /*  Compare through private_document_ref(), the same
+             *  reduction that built the link in the first place.
+             *
+             *  This was a LIKE '%/leave/<name>', which assumes the
+             *  stored path has a slash before the folder. The bare
+             *  "leave/doc_x.pdf" shape has not got one, so an
+             *  employee whose row carried that shape was shown a
+             *  link to their own sick note and handed a 404 when
+             *  they clicked it. Measured against all four shapes
+             *  the database actually holds.
+             *
+             *  It also keeps $name out of a LIKE pattern, where %
+             *  and _ are wildcards rather than characters.        */
+            $want = $folder . '/' . $name;
+            $rows = db_all(
+                'SELECT document_url FROM leave_requests
+                  WHERE employee_id = :e AND document_url IS NOT NULL',
+                [':e' => (int) $mine['employee_id']]
+            );
+            foreach ($rows as $row) {
+                if (private_document_ref($row['document_url']) === $want) {
+                    $owned = true;
+                    break;
+                }
+            }
+        }
+
         if (!$owned) {
             http_response_code(404);
             exit('Not found.');

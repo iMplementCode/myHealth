@@ -278,24 +278,27 @@ function upload_dir_problem(string $dir): ?string
 }
 
 /**
- * The link to a private uploaded document.
+ * Reduce a stored document path to the "folder/name" the private
+ * document endpoint speaks in.
  *
- * Payment slips and the like are no longer served off the disk by
- * the web server — see public/documents/view.php for why — so a
- * stored proof_url is not a URL anybody can follow any more. This
- * turns whatever is on the row into a link through the endpoint
- * that checks for a session first.
+ * What is actually in the database is not one shape, after several
+ * years of the application: an absolute URL from when UPLOAD_URL
+ * was baked in, a rooted "/uploads/payments/doc_x.pdf", or a bare
+ * "payments/doc_x.pdf". All of them reduce to the last two
+ * segments, which is all the endpoint wants.
  *
- * It takes what is actually in the database, which after several
- * years of the application is not one shape: an absolute URL from
- * when UPLOAD_URL was baked in, or a bare "payments/doc_x.pdf".
- * Both reduce to the last two segments, which is all the endpoint
- * wants.
+ * This is the ONE place that reduction happens. It used to be
+ * inline in private_document_url() while public/documents/view.php
+ * decided ownership with its own LIKE '%/leave/<name>' — and that
+ * pattern needs a slash before the folder, which the bare shape
+ * has not got. So the link rendered, the employee clicked it, and
+ * their own sick note came back 404. Two readings of one format is
+ * the bug; one function is the fix.
  *
  * @param  ?string $stored  proof_url / agreement_url as recorded
- * @return ?string          a URL to follow, or null if there is no document
+ * @return ?string          "folder/name", or null if there is no document
  */
-function private_document_url(?string $stored, bool $download = false): ?string
+function private_document_ref(?string $stored): ?string
 {
     $stored = trim((string) $stored);
     if ($stored === '') {
@@ -312,6 +315,24 @@ function private_document_url(?string $stored, bool $download = false): ?string
     }
     $name   = array_pop($parts);
     $folder = array_pop($parts);
+
+    return $folder . '/' . $name;
+}
+
+/**
+ * The link to a private uploaded document.
+ *
+ * @param  ?string $stored  proof_url / agreement_url as recorded
+ * @return ?string          a URL to follow, or null if there is no document
+ */
+function private_document_url(?string $stored, bool $download = false): ?string
+{
+    $ref = private_document_ref($stored);
+    if ($ref === null) {
+        return null;
+    }
+
+    [$folder, $name] = explode('/', $ref, 2);
 
     return url('documents/view.php?f=' . rawurlencode($folder) . '/' . rawurlencode($name)
         . ($download ? '&dl=1' : ''));

@@ -164,13 +164,56 @@ function batch_allocate(
                 'message' => 'A quantity to dispense must be more than nothing.'];
     }
 
+    $pdo = db();
+
     if (!batch_tracked($productId)) {
-        // Not an error. See batch_tracked() for why.
+        /*  Not an error — see batch_tracked() for why a product can
+         *  legitimately have no batches. But it is not a free pass
+         *  either, and it used to be.
+         *
+         *  A product whose stock was typed in as an opening figure,
+         *  rather than received against a delivery, has no batch
+         *  rows. This branch returned ok and the counter went
+         *  straight on to decrement products.stock_quantity, so for
+         *  those products nothing in the application checked there
+         *  was any stock to sell. The only thing standing in the way
+         *  was the database trigger that refuses a negative figure —
+         *  which held, and rolled the sale back, but surfaced as
+         *  "The sale could not be completed. Please try again." A
+         *  cashier told to try again tries again, and it fails
+         *  again, because retrying is not what is wrong.
+         *
+         *  So the same question the tracked path asks, asked here,
+         *  and answered in the same words. FOR UPDATE because two
+         *  tills reading "1 left" at the same moment is the whole
+         *  reason the tracked path locks: this branch has to queue
+         *  on the product row the way that one queues on the batch.
+         *  Callers take products in id order (batch_allocate_many
+         *  ksorts), so the locks are taken in a consistent order. */
+        if (!$pdo->inTransaction()) {
+            throw new RuntimeException(
+                'batch_allocate() must run inside a transaction: the product row it locks '
+              . 'has to stay locked until the sale is committed.'
+            );
+        }
+
+        $have = db_value(
+            'SELECT stock_quantity FROM products WHERE product_id = :p FOR UPDATE',
+            [':p' => $productId]
+        );
+
+        //  No such product is the caller's problem to report, not a
+        //  stock shortage; leave it as it was and let the insert fail.
+        if ($have !== null && round((float) $have, 3) < round($quantity, 3)) {
+            return ['ok' => false, 'tracked' => false, 'allocations' => [],
+                    'message' => 'Only ' . rtrim(rtrim(number_format((float) $have, 3, '.', ','), '0'), '.')
+                               . ' can be dispensed.'];
+        }
+
         return ['ok' => true, 'tracked' => false, 'allocations' => [],
                 'message' => ''];
     }
 
-    $pdo = db();
     if (!$pdo->inTransaction()) {
         /*  Refused rather than quietly opening one. A caller that
          *  forgot the transaction is a caller whose sale can half

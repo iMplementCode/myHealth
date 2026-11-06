@@ -824,26 +824,50 @@ function leave_submit(array $in): array
         return $fail('That range contains no working days — it is all weekend and public holidays.');
     }
 
-    //  The balance, including anything already pending, so two
-    //  requests that each fit cannot both be made.
-    $bal = leave_balance($employeeId, $typeId, leave_year_of($from));
-    if (!$bal['uncapped'] && $days > (float) $bal['available']) {
-        return $fail(sprintf(
-            '%s is %s %s and only %s %s left this year (%s already taken, %s awaiting a decision).',
-            $type['name'], rtrim(rtrim(number_format($days, 1), '0'), '.'),
-            $days === 1.0 ? 'day' : 'days',
-            rtrim(rtrim(number_format((float) $bal['available'], 1), '0'), '.'),
-            ((float) $bal['available']) === 1.0 ? 'day' : 'days',
-            rtrim(rtrim(number_format($bal['taken'], 1), '0'), '.'),
-            rtrim(rtrim(number_format($bal['pending'], 1), '0'), '.')
-        ));
-    }
-
     $me  = current_user();
     $pdo = db();
     $pdo->beginTransaction();
 
     try {
+        /*  Lock this employee before reading their balance.
+         *
+         *  The balance check below counts what is already approved
+         *  AND what is pending, so two requests that each fit but
+         *  together do not should not both be accepted. That is
+         *  true one request at a time and was false for two at
+         *  once: both read the same 21 days, both decided they
+         *  fitted, and both were written. Measured, not guessed —
+         *  two submissions fired together booked 15 and 14 days
+         *  against a 21-day entitlement.
+         *
+         *  Unlike stock, payments and the journal, leave has no
+         *  database invariant to fall back on: an entitlement is
+         *  computed from the leave type, any per-employee override
+         *  and the year, and putting that in a trigger would be a
+         *  second copy of the rules to keep in step. So the lock
+         *  is the guard, and it is taken on the employee row —
+         *  which is the right granularity, because one person's
+         *  requests have to queue and two people's do not.
+         *
+         *  Overlapping DATES are a separate matter and are refused
+         *  by a trigger; this is about the total.                 */
+        db_value('SELECT 1 FROM employees WHERE employee_id = :e FOR UPDATE',
+                 [':e' => $employeeId]);
+
+        $bal = leave_balance($employeeId, $typeId, leave_year_of($from));
+        if (!$bal['uncapped'] && $days > (float) $bal['available']) {
+            $pdo->rollBack();
+            return $fail(sprintf(
+                '%s is %s %s and only %s %s left this year (%s already taken, %s awaiting a decision).',
+                $type['name'], rtrim(rtrim(number_format($days, 1), '0'), '.'),
+                $days === 1.0 ? 'day' : 'days',
+                rtrim(rtrim(number_format((float) $bal['available'], 1), '0'), '.'),
+                ((float) $bal['available']) === 1.0 ? 'day' : 'days',
+                rtrim(rtrim(number_format($bal['taken'], 1), '0'), '.'),
+                rtrim(rtrim(number_format($bal['pending'], 1), '0'), '.')
+            ));
+        }
+
         $number = next_document_number('leave_requests', 'request_number', 'LV');
 
         $id = (int) db_value(
@@ -943,62 +967,122 @@ function leave_decide(int $requestId, string $action, string $note = ''): array
 {
     $fail = static fn(string $m): array => ['ok' => false, 'message' => $m];
 
+    /*  Lock the request, then read it.
+     *
+     *  Every check below turns on the status, and the status was
+     *  read without a lock and written a moment later. Two people
+     *  deciding the same request at the same time therefore both
+     *  passed: one approving and one refusing were BOTH told it had
+     *  worked, the employee was sent both emails, the audit log
+     *  recorded both, and the row ended up as whichever committed
+     *  last. Measured, not guessed.
+     *
+     *  Holding the row for the length of the decision makes the
+     *  second caller read the status the first one left, so its
+     *  transition check refuses it the way it would have if the two
+     *  had been a second apart.                                   */
+    $pdo      = db();
+    $ownsTxn  = !$pdo->inTransaction();
+    if ($ownsTxn) {
+        $pdo->beginTransaction();
+    }
+
+    $done = static function (array $r) use ($pdo, $ownsTxn): array {
+        if ($ownsTxn && $pdo->inTransaction()) {
+            $r['ok'] ? $pdo->commit() : $pdo->rollBack();
+        }
+        return $r;
+    };
+
+    db_value('SELECT 1 FROM leave_requests WHERE request_id = :id FOR UPDATE',
+             [':id' => $requestId]);
+
     $req = leave_request_get($requestId);
     if (!$req) {
-        return $fail('That request no longer exists.');
+        return $done($fail('That request no longer exists.'));
     }
 
     $me   = current_user();
     $note = trim($note) ?: null;
 
+    /*  Say what actually happened, before the permission guards get
+     *  a chance to misdescribe it.
+     *
+     *  Each guard below folds two very different refusals into one
+     *  false: "you are not allowed to" and "somebody already did".
+     *  So a manager who clicked Approve a second after a colleague
+     *  clicked Refuse was told they could not give the departmental
+     *  decision on this request — a permission they plainly have.
+     *  Two people deciding at once is the normal case now that the
+     *  row is locked, so the message has to be right.
+     *
+     *  We hold the lock, so the status just read is settled: name
+     *  it rather than guessing from the action.                  */
+    $status  = (string) $req['status'];
+    $settled = [
+        'approved'  => 'already been approved',
+        'rejected'  => 'already been refused',
+        'cancelled' => 'already been cancelled',
+        'withdrawn' => 'already been withdrawn by the employee',
+    ];
+
+    //  'approved' is not the end of the road for a cancellation —
+    //  cancelling leave that was granted is what that action is for.
+    if (isset($settled[$status]) && !($action === 'cancel' && $status === 'approved')) {
+        return $done($fail($req['request_number'] . ' has ' . $settled[$status] . '.'));
+    }
+    if ($action === 'dept_approve' && $status === 'dept_approved') {
+        return $done($fail($req['request_number'] . ' has already had its departmental approval and is with HR.'));
+    }
+
     switch ($action) {
         case 'dept_approve':
             if (!leave_may_dept_decide($req)) {
-                return $fail('You cannot give the departmental decision on this request.');
+                return $done($fail('You cannot give the departmental decision on this request.'));
             }
             $target = 'dept_approved';
             break;
 
         case 'final_approve':
             if (!leave_may_final_decide($req)) {
-                return $fail($req['status'] === 'dept_approved'
+                return $done($fail($req['status'] === 'dept_approved'
                     ? 'Final approval has to come from somebody other than whoever approved it for the department.'
-                    : 'This request still needs its departmental decision.');
+                    : 'This request still needs its departmental decision.'));
             }
             //  The document rule bites here rather than at
             //  submission, because the note arrives afterwards.
             if (!empty($req['requires_document']) && empty($req['document_url'])) {
-                return $fail($req['type_name'] . ' needs a supporting document attached before it can be approved.');
+                return $done($fail($req['type_name'] . ' needs a supporting document attached before it can be approved.'));
             }
             $target = 'approved';
             break;
 
         case 'reject':
             if (!leave_may_dept_decide($req) && !leave_may_final_decide($req)) {
-                return $fail('You cannot decide this request.');
+                return $done($fail('You cannot decide this request.'));
             }
             if ($note === null) {
-                return $fail('Say why it is being refused — the employee is told the reason.');
+                return $done($fail('Say why it is being refused — the employee is told the reason.'));
             }
             $target = 'rejected';
             break;
 
         case 'cancel':
             if (!leave_may_cancel($req)) {
-                return $fail('Only a manager or administrator can cancel approved leave.');
+                return $done($fail('Only a manager or administrator can cancel approved leave.'));
             }
             $target = 'cancelled';
             break;
 
         case 'withdraw':
             if (!leave_may_withdraw($req)) {
-                return $fail('You can only withdraw your own request, and only before it is decided.');
+                return $done($fail('You can only withdraw your own request, and only before it is decided.'));
             }
             $target = 'withdrawn';
             break;
 
         default:
-            return $fail('That is not something that can be done to a leave request.');
+            return $done($fail('That is not something that can be done to a leave request.'));
     }
 
     //  Cover is recomputed at the moment of the decision, not read
@@ -1035,7 +1119,7 @@ function leave_decide(int $requestId, string $action, string $note = ''): array
         db_run('UPDATE leave_requests SET ' . implode(', ', $sets) . ' WHERE request_id = :id', $args);
     } catch (Throwable $e) {
         error_log('[LEAVE] could not record decision: ' . $e->getMessage());
-        return $fail('The decision could not be recorded.');
+        return $done($fail('The decision could not be recorded.'));
     }
 
     audit_log('leave.' . $action, 'leave_requests', $requestId, [
@@ -1046,8 +1130,6 @@ function leave_decide(int $requestId, string $action, string $note = ''): array
         'uncovered' => $cover !== null,
     ]);
 
-    leave_notify_decided($requestId, $target, $note);
-
     $words = [
         'dept_approved' => 'approved for the department and passed to HR',
         'approved'      => 'approved',
@@ -1056,11 +1138,23 @@ function leave_decide(int $requestId, string $action, string $note = ''): array
         'withdrawn'     => 'withdrawn',
     ];
 
-    return [
+    /*  Commit first, notify second, and in that order for a reason:
+     *  the commit releases the row, and sending mail can take
+     *  seconds against a slow SMTP host. Nobody else can decide,
+     *  withdraw or even open this request while the lock is held,
+     *  so the lock must not outlive the decision it protects.
+     *
+     *  It also means the email reads committed state rather than
+     *  our own uncommitted write.                                */
+    $result = $done([
         'ok'      => true,
         'message' => $req['request_number'] . ' has been ' . ($words[$target] ?? $target) . '.',
         'cover_warning' => $cover,
-    ];
+    ]);
+
+    leave_notify_decided($requestId, $target, $note);
+
+    return $result;
 }
 
 /* ─────────────────────────────────────────────────────────────
